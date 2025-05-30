@@ -1,0 +1,43 @@
+Build a single-page web, mobile responsive, and mobile app that mimics the ChatGPT interface exactly. Use these specifications:
+	1.	Layout
+	•	Full height flex container with vertical orientation
+	•	Sticky top nav with title “AI Agent” (match ChatGPT style and color)
+	•	Scrollable message container with padding and auto-scroll-to-bottom
+	•	Fixed bottom chat input area with text box + send button
+	•	Smooth fade-in animation for messages
+	•	Max width constraints on desktop (like ChatGPT’s centered column)
+	•	Match padding, spacing, font size, and font family exactly
+	•	Light and dark mode toggle (default to dark)
+	2.	Chat Bubbles
+	•	Left-aligned for AI, right-aligned for user
+	•	Rounded corners and soft background shadows
+	•	Markdown support (bold, italics, links, code blocks, etc.)
+	•	AI messages show animated typing indicator (”…”) before rendering full text
+	•	Messages stack vertically with proper spacing
+	3.	Input Box
+	•	Expands vertically as user types (up to 6 lines)
+	•	Submit on Enter (Shift+Enter for new line)
+	•	Disabled during AI response
+	•	Shows loading spinner on submit
+	•	Input area should match ChatGPT’s gray background and subtle border
+	4.	Behavior
+	•	Auto-scroll to bottom when new messages arrive
+	•	Store chat history in local state
+	•	Implement fetch() to simulate sending prompt to OpenAI and receiving response
+	•	Allow clicking a message to copy it to clipboard
+	•	Ensure keyboard accessibility (Tab, Shift+Tab, Enter)
+	5.	Responsiveness
+	•	Match ChatGPT mobile layout exactly
+	•	Scrollable input and message area without breaking layout
+	•	Sticky input on small screens with safe area insets
+
+⸻
+
+Guardrails:
+	•	Use any external component libraries that will get us our look (e.g., shadcn, MUI, Chakra)
+	•	Match ChatGPT’s visual design pixel-for-pixel using everything at your disposal
+	•	All interactions must feel native and fluid
+	•	Avoid placeholder or boilerplate UI – this must feel like the real ChatGPT
+	•	Modularize your code: separate components for ChatMessage, ChatInput, TypingIndicator, Header
+	•	Do not add features ChatGPT doesn’t have (e.g., avatars, sound, emoji picker)
+	•	Include a sample .env key for OpenAI API usage (but make actual call mockable)

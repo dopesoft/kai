@@ -1,0 +1,76 @@
+Thanks for sharing the files. Here’s the bulletproof fix tailored to your current Vite/React app setup based on your MessageContainer.tsx and ChatMessage.tsx components.
+
+⸻
+
+✅ Diagnosis
+
+In MessageContainer.tsx, you’re rendering messages top-down with:
+
+<div className="overflow-y-auto ...">
+  {messages.map(...)}
+</div>
+
+But there’s no scroll logic tied to the user’s message submission — so the scroll remains wherever it was, which is why you’re not getting the ChatGPT-style behavior where the new user message scrolls near the top and the AI streams below it.
+
+⸻
+
+✅ Bulletproof Fix (Code Insert for MessageContainer.tsx)
+
+We’ll:
+	•	Attach a ref to the container.
+	•	Track the last user message.
+	•	On message list change, scroll the last user message to near the top.
+
+🔧 Add inside MessageContainer.tsx:
+
+import { useEffect, useRef } from "react";
+
+export default function MessageContainer({ messages }: MessageContainerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastUserRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const userMessage = lastUserRef.current;
+
+    if (container && userMessage) {
+      requestAnimationFrame(() => {
+        const offset = userMessage.offsetTop - 40; // Adjust padding as needed
+        container.scrollTo({ top: offset >= 0 ? offset : 0, behavior: "smooth" });
+      });
+    }
+  }, [messages]);
+
+  // Find index of last user message
+  const lastUserIndex = [...messages].reverse().findIndex((msg) => msg.role === "user");
+  const absoluteIndex = lastUserIndex >= 0 ? messages.length - 1 - lastUserIndex : -1;
+
+  return (
+    <div
+      ref={containerRef}
+      className="overflow-y-auto h-full px-4 pb-[100px] pt-4 space-y-4"
+    >
+      {messages.map((message, index) => (
+        <div
+          key={index}
+          ref={index === absoluteIndex ? lastUserRef : null}
+        >
+          <ChatMessage message={message} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+⸻
+
+💡 Why This Works
+	•	It calculates the actual last user message, not just the last item in the array.
+	•	It waits for the DOM to paint with requestAnimationFrame.
+	•	It scrolls that user message near the top, giving space for the AI to respond below — exactly like ChatGPT.
+	•	It avoids position: fixed or janky layout shifts.
+
+⸻
+
+Let me know if you want to tweak this for streaming responses or add buffer spacing for mobile!
