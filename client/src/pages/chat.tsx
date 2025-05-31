@@ -7,6 +7,8 @@ import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { SparklesBackground } from "@/components/ui/sparkles-background";
 import { BackgroundPathsEffect } from "@/components/ui/background-paths";
+import { AuthSetupBanner } from "@/components/auth/AuthSetupBanner";
+import { useAuth } from "@/lib/auth-context";
 import type { Message, ChatRequest } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -21,6 +23,7 @@ import {
 } from "@/lib/chatThreads";
 
 export default function Chat() {
+  const { authEnabled } = useAuth();
   const [isTyping, setIsTyping] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeThreadId, setActiveThreadIdState] = useState<string | null>(null);
@@ -240,6 +243,13 @@ export default function Chat() {
 
   return (
     <div className="h-screen flex bg-white dark:bg-black relative overflow-hidden">
+      {/* Auth setup banner */}
+      {!authEnabled && (
+        <div className="fixed top-0 left-0 right-0 z-50 p-4">
+          <AuthSetupBanner />
+        </div>
+      )}
+
       {/* Global background effects */}
       {hasMessages ? <SparklesBackground /> : <BackgroundPathsEffect />}
       
@@ -256,7 +266,7 @@ export default function Chat() {
         <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} onNewChat={handleNewChat} />
         
         {hasMessages ? (
-          <div className="flex-1 flex flex-col h-full pt-16">
+          <div className={`flex-1 flex flex-col h-full ${!authEnabled ? 'pt-20' : 'pt-16'}`}>
             <div className="flex-1 overflow-hidden">
               <MessageContainer 
                 messages={currentMessages} 
@@ -265,7 +275,7 @@ export default function Chat() {
                 isStreaming={isStreaming}
               />
             </div>
-            <div className="flex-shrink-0 z-30" style={{ marginBottom: '80px' }}>
+            <div className="flex-shrink-0 z-30" style={{ marginBottom: '80px', position: 'relative', top: '-4px' }}>
               <ChatInput
                 onSendMessage={handleSendMessage}
                 isLoading={sendMessageMutation.isPending}
@@ -273,7 +283,7 @@ export default function Chat() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 pt-16">
+          <div className={`flex-1 ${!authEnabled ? 'pt-20' : 'pt-16'}`}>
             <WelcomeScreen
               onSendMessage={handleSendMessage}
               isLoading={sendMessageMutation.isPending}

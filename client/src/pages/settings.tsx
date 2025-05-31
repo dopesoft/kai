@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Camera, Check, Mail, Calendar, Cloud, Database, MoreVertical, Plus, Brain, ChevronDown } from "lucide-react";
+import { X, Camera, Check, Mail, Calendar, Cloud, Database, MoreVertical, Plus, Brain, ChevronDown, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,23 +15,51 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { WavyBackground } from "@/components/ui/wavy-background";
 import { SparklesCore } from "@/components/ui/sparkles";
+import { useAuth } from "@/lib/auth-context";
+
+// Add interface for integration type
+interface Integration {
+  id: string;
+  type: "CALENDAR" | "MAIL" | "AI";
+  name: string;
+  provider?: string;
+  account: string;
+  status: string;
+  icon?: string;
+}
 
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const { user, profile, signOut, updateProfile, refreshProfile, loading, authEnabled, session } = useAuth();
+  
+  // Debug: Log current auth state
+  console.log('Settings - Auth State:', {
+    user: user ? 'exists' : 'null',
+    profile: profile ? 'exists' : 'null',
+    loading,
+    authEnabled,
+    session: session ? 'exists' : 'null'
+  });
+  
   const [activeTab, setActiveTab] = useState("profile");
-  const [firstName, setFirstName] = useState("Margaret");
-  const [lastName, setLastName] = useState("Villard");
-  const [username, setUsername] = useState("margaret-villard-69");
-  const [website, setWebsite] = useState("www.margaret.com");
-  const [biography, setBiography] = useState("Hey, I am Margaret, a web developer who loves turning ideas into amazing websites!");
+  
+  // Original profile form data - keeping the existing fields
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
+  const [website, setWebsite] = useState("");
+  const [biography, setBiography] = useState("");
+  const [profileLoading, setProfileLoading] = useState(false);
+  
+  // Legacy integration states
   const [chatgptKey, setChatgptKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gpt-4o");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"CALENDAR" | "MAIL" | "AI">("CALENDAR");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingIntegration, setEditingIntegration] = useState<any>(null);
+  const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
   const [isAISetupModalOpen, setIsAISetupModalOpen] = useState(false);
   const [selectedAIProvider, setSelectedAIProvider] = useState<"openai" | "claude" | "gemini" | null>(null);
   const [editFormData, setEditFormData] = useState({
@@ -53,6 +81,82 @@ export default function Settings() {
 
   const [integrations, setIntegrations] = useState(getConfiguredIntegrations());
   const [testingIntegration, setTestingIntegration] = useState(false);
+
+  // Load profile data when component mounts or profile changes
+  useEffect(() => {
+    if (profile) {
+      // Map Supabase profile to existing form fields
+      const fullName = profile.full_name || "";
+      const nameParts = fullName.split(" ");
+      setFirstName(nameParts[0] || "");
+      setLastName(nameParts.slice(1).join(" ") || "");
+      
+      // Use kai_persona for biography if it's a string, otherwise use description field
+      let bioText = "";
+      if (profile.kai_persona) {
+        if (typeof profile.kai_persona === 'string') {
+          bioText = profile.kai_persona;
+        } else if (profile.kai_persona.description) {
+          bioText = profile.kai_persona.description;
+        }
+      }
+      setBiography(bioText);
+      
+      // Set website from profile_image_url for now (or we could add a separate website field to DB)
+      setWebsite(profile.profile_image_url || "");
+      
+      // Username could be derived from email
+      setUsername(user?.email?.split("@")[0] || "");
+    }
+  }, [profile, user]);
+
+  // Handle profile save - map form fields back to Supabase
+  const handleProfileSave = async () => {
+    if (!user) return;
+    
+    try {
+      setProfileLoading(true);
+      
+      const fullName = `${firstName} ${lastName}`.trim();
+      
+      await updateProfile({
+        full_name: fullName,
+        phone: profile?.phone || "", // Keep existing phone
+        profile_image_url: website, // Store website in this field for now
+        kai_persona: { description: biography } // Store biography in persona
+      });
+      
+      toast({
+        title: "Profile updated",
+        description: "Your profile has been updated successfully.",
+      });
+
+      // Refresh profile to update sidebar
+      await refreshProfile();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile.",
+        variant: "destructive",
+      });
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // AuthGuard will automatically redirect to /auth when user becomes null
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign out.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Load settings from localStorage on component mount
   useEffect(() => {
@@ -234,17 +338,22 @@ export default function Settings() {
     setLocation("/");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Save API settings to localStorage
     localStorage.setItem("chatgpt_api_key", chatgptKey);
     localStorage.setItem("chatgpt_model", selectedModel);
     
-    toast({
-      title: "Settings saved",
-      description: "Your API settings have been saved locally in your browser.",
-    });
-    
-    setLocation("/");
+    // Also save profile data to Supabase if user is logged in
+    if (user && activeTab === "profile") {
+      await handleProfileSave();
+    } else {
+      toast({
+        title: "Settings saved",
+        description: "Your API settings have been saved locally in your browser.",
+      });
+      
+      setLocation("/");
+    }
   };
 
   const characterCount = biography.length;
@@ -254,9 +363,9 @@ export default function Settings() {
   // Helper functions
   const groupIntegrationsByType = () => {
     const grouped = {
-      CALENDAR: integrations.filter(i => i.type === "CALENDAR"),
-      MAIL: integrations.filter(i => i.type === "MAIL"), 
-      AI: integrations.filter(i => i.type === "AI")
+      CALENDAR: integrations.filter((i: Integration) => i.type === "CALENDAR"),
+      MAIL: integrations.filter((i: Integration) => i.type === "MAIL"), 
+      AI: integrations.filter((i: Integration) => i.type === "AI")
     };
     return grouped;
   };
@@ -274,7 +383,7 @@ export default function Settings() {
     setEditFormData({ apiKey: "", email: "", model: "", calendarUrl: "" });
   };
 
-  const handleEditIntegration = (integration: any) => {
+  const handleEditIntegration = (integration: Integration) => {
     setEditingIntegration(integration);
     setEditFormData({
       apiKey: integration.type === "AI" ? chatgptKey : "",
@@ -309,7 +418,7 @@ export default function Settings() {
     }
   };
 
-  const renderIntegrationCard = (integration: any) => (
+  const renderIntegrationCard = (integration: Integration) => (
     <Card key={integration.id} className="bg-white dark:bg-black border-gray-300 dark:border-white hover:shadow-md transition-shadow">
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-4">
@@ -368,6 +477,14 @@ export default function Settings() {
       </CardContent>
     </Card>
   );
+
+  // Get user's initials for avatar
+  const getUserInitials = () => {
+    if (!firstName && !lastName) return "U";
+    const firstInitial = firstName?.[0] || '';
+    const lastInitial = lastName?.[0] || '';
+    return (firstInitial + lastInitial).toUpperCase() || "U";
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4 relative">
@@ -513,7 +630,7 @@ export default function Settings() {
               <Avatar className="w-20 h-20 border-4 border-white dark:border-black shadow-lg">
                 <AvatarImage src="/placeholder-avatar.jpg" alt="Profile" />
                 <AvatarFallback className="bg-gray-200 dark:bg-white text-gray-600 dark:text-black text-lg font-semibold">
-                  {firstName[0]}{lastName[0]}
+                  {getUserInitials()}
                 </AvatarFallback>
               </Avatar>
               <Button
@@ -535,15 +652,31 @@ export default function Settings() {
                     {/* First Name */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
-                        First name
+                        First Name
                       </label>
                       <Input
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
                         className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        placeholder="Enter your first name"
                       />
                     </div>
 
+                    {/* Last Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                        Last Name
+                      </label>
+                      <Input
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        placeholder="Enter your last name"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
                     {/* Username */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
@@ -552,22 +685,8 @@ export default function Settings() {
                       <Input
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Enter username"
-                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Last Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
-                        Last name
-                      </label>
-                      <Input
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
                         className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        placeholder="Enter your username"
                       />
                     </div>
 
@@ -579,8 +698,8 @@ export default function Settings() {
                       <Input
                         value={website}
                         onChange={(e) => setWebsite(e.target.value)}
-                        placeholder="Enter website URL"
-                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        placeholder="Enter your website URL"
                       />
                     </div>
                   </div>
@@ -608,6 +727,39 @@ export default function Settings() {
                     </span>
                   </div>
                 </div>
+
+                {/* Save Profile Button */}
+                <div className="flex justify-between items-center mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <Button
+                    onClick={handleProfileSave}
+                    disabled={profileLoading}
+                    className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100"
+                  >
+                    {profileLoading ? "Saving..." : "Save Profile"}
+                  </Button>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        // Clear all local storage and force reload
+                        localStorage.clear();
+                        window.location.href = '/auth';
+                      }}
+                      className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/20 text-sm px-3 py-1"
+                    >
+                      Force Clear
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </Button>
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="integrations" className="space-y-8 mt-0">
@@ -623,7 +775,7 @@ export default function Settings() {
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">AI Integrations</h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {grouped.AI.map(integration => renderIntegrationCard(integration))}
+                          {grouped.AI.map((integration: Integration) => renderIntegrationCard(integration))}
                           {renderAddIntegrationCard("AI")}
                         </div>
                       </div>
@@ -635,7 +787,7 @@ export default function Settings() {
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Mail Integrations</h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {grouped.MAIL.map(integration => renderIntegrationCard(integration))}
+                          {grouped.MAIL.map((integration: Integration) => renderIntegrationCard(integration))}
                           {renderAddIntegrationCard("MAIL")}
                         </div>
                       </div>
@@ -647,7 +799,7 @@ export default function Settings() {
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Calendar Integrations</h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {grouped.CALENDAR.map(integration => renderIntegrationCard(integration))}
+                          {grouped.CALENDAR.map((integration: Integration) => renderIntegrationCard(integration))}
                           {renderAddIntegrationCard("CALENDAR")}
                         </div>
                       </div>

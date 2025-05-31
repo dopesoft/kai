@@ -1,4 +1,4 @@
-import { Search, X, Menu, MessageSquare, Folder, Plus, Sun, Moon, MoreHorizontal, Trash2 } from "lucide-react";
+import { Search, X, Menu, MessageSquare, Folder, Plus, Sun, Moon, MoreHorizontal, Trash2, Brain, Settings, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -7,6 +7,7 @@ import { loadThreads, getActiveThreadId, deleteThread, type ChatThread } from "@
 import { isYesterday } from "date-fns";
 import { useLocation } from "wouter";
 import { useTheme } from "@/lib/theme";
+import { useAuth } from "@/lib/auth-context";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -21,6 +22,22 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { user, profile, authEnabled } = useAuth();
+
+  // Get user's first name from profile
+  const getFirstName = () => {
+    if (!profile?.full_name) return null;
+    return profile.full_name.split(' ')[0];
+  };
+
+  // Get user's initials for avatar
+  const getUserInitials = () => {
+    if (!profile?.full_name) return "U";
+    const nameParts = profile.full_name.split(' ');
+    const firstInitial = nameParts[0]?.[0] || '';
+    const lastInitial = nameParts[1]?.[0] || '';
+    return (firstInitial + lastInitial).toUpperCase() || "U";
+  };
 
   useEffect(() => {
     const loadedThreads = loadThreads();
@@ -149,7 +166,25 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
             </button>
           </div>
 
-
+          {/* Navigation */}
+          <div className="px-3 pb-4 border-b border-gray-300 dark:border-gray-600">
+            <div className="space-y-1">
+              <button 
+                onClick={() => setLocation("/memory")}
+                className="w-full justify-start text-[#666666] dark:text-white hover:text-black dark:hover:text-white h-8 flex items-center transition-colors rounded px-2"
+              >
+                <Brain className="w-4 h-4 mr-2" />
+                Memory
+              </button>
+              <button 
+                onClick={() => setLocation("/settings")}
+                className="w-full justify-start text-[#666666] dark:text-white hover:text-black dark:hover:text-white h-8 flex items-center transition-colors rounded px-2"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </button>
+            </div>
+          </div>
 
           {/* Chat History */}
           <ScrollArea className="flex-1 px-3">
@@ -177,15 +212,29 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
           {/* User profile - Fixed to bottom */}
           <div className="p-3 border-t border-gray-300 dark:border-gray-600">
             <div className="flex items-center justify-between">
-              <button 
-                onClick={() => setLocation("/settings")}
-                className="flex items-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-800 rounded p-1 transition-colors"
-              >
-                <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
-                  U
-                </div>
-                <span className="text-sm text-[#666666] dark:text-white">User</span>
-              </button>
+              {authEnabled && user ? (
+                <button 
+                  onClick={() => setLocation("/settings")}
+                  className="flex items-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-800 rounded p-1 transition-colors"
+                >
+                  <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
+                    {getUserInitials()}
+                  </div>
+                  <span className="text-sm text-[#666666] dark:text-white">
+                    {getFirstName() || "User"}
+                  </span>
+                </button>
+              ) : (
+                <button 
+                  onClick={() => setLocation("/settings")}
+                  className="flex items-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-800 rounded p-1 transition-colors"
+                >
+                  <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
+                    U
+                  </div>
+                  <span className="text-sm text-[#666666] dark:text-white">User</span>
+                </button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
