@@ -50,6 +50,10 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
     processed = processed.replace(/^([A-Za-z][A-Za-z0-9\s\-&]+):/gm, '**$1:**');
     processed = processed.replace(/\n([A-Za-z][A-Za-z0-9\s\-&]+):/g, '\n**$1:**');
     
+    // Ensure line break after ALL colons (not just bolded ones) to fix formatting
+    // This ensures bullets after "Thawing and Drying the Turkey:" go to new line
+    processed = processed.replace(/:(\s+[^:\n])/g, ':\n$1');
+    
     // Ensure line break after bolded section headers if followed by text
     processed = processed.replace(/(\*\*[^*]+:\*\*)([^\n])/g, '$1\n$2');
     

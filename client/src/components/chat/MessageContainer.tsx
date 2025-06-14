@@ -123,7 +123,7 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
           if (onContainerRef) onContainerRef(ref);
         }}
         className="h-full overflow-y-auto px-4 scroll-smooth text-[15px]"
-        style={{ paddingTop: '16px', paddingBottom: '120px' }}
+        style={{ paddingTop: '16px', paddingBottom: '40px' }}
       >
         <div className="max-w-4xl mx-auto space-y-8">
           {messagePairs.map((pair, idx) => (
