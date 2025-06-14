@@ -131,10 +131,11 @@ export default function Settings() {
                   dbInt.provider === 'gemini' ? 'Google Gemini' : dbInt.provider,
             provider: dbInt.provider,
             account: dbInt.config?.model || 'Default',
-            status: 'CONNECTED',
+            status: dbInt.api_key ? 'CONNECTED' : 'ERROR',
             icon: dbInt.provider === 'openai' ? '🤖' : 
                   dbInt.provider === 'claude' ? '🧠' : 
-                  dbInt.provider === 'gemini' ? '💎' : '🔗'
+                  dbInt.provider === 'gemini' ? '💎' : '🔗',
+            hasError: !dbInt.api_key && dbInt.api_key_error
           }));
           
           setIntegrations(transformedIntegrations);
