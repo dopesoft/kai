@@ -6,6 +6,12 @@
     "api/chat/threads.ts": {
       "maxDuration": 30
     },
+    "api/chat/stream.ts": {
+      "maxDuration": 30
+    },
+    "api/chat/messages.ts": {
+      "maxDuration": 30
+    },
     "api/integrations.ts": {
       "maxDuration": 30
     }
