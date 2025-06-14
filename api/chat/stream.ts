@@ -127,7 +127,7 @@ Only extract clear, factual information. Be very selective.`;
   try {
     const response = await (openai as any).responses.create({
       model: "gpt-4",
-      messages: [
+      input: [
         { role: "system", content: "Extract memories from the conversation following the JSON format specified." },
         { role: "user", content: extractionPrompt }
       ],
@@ -312,10 +312,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
     
-    // Use messages format for responses API
+    // Use input parameter for responses API
     const requestParams: any = {
       model: activeModel,
-      messages: messages,
+      input: messages,
       max_output_tokens: 2000
     };
 
