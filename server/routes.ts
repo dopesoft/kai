@@ -109,13 +109,15 @@ Example response:
 Be smart about what matters. Generate natural, conversational display text.`;
 
   try {
-    const response = await client.chat.completions.create({
+    const response = await (client as any).responses.create({
       model: "gpt-4",
-      messages: [{ role: "user", content: extractionPrompt }],
+      instructions: "Extract memories from the conversation following the JSON format specified.",
+      input: extractionPrompt,
       temperature: 0.7,
+      max_output_tokens: 1000
     });
 
-    const content = response.choices[0].message.content || '{"short_term":[],"long_term":[]}';
+    const content = response.output?.[0]?.content?.[0]?.text || '{"short_term":[],"long_term":[]}';
     console.log('📝 Raw extraction response:', content);
     
     const extracted = JSON.parse(content);
@@ -244,7 +246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const isReasoningModel = /^(o|gpt-4o)/i.test(activeModel);
+          const isReasoningModel = /^(o1)/i.test(activeModel);
 
           const requestParams: any = {
             model: activeModel,
@@ -253,13 +255,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             max_output_tokens: 1000
           };
 
+          // Only add temperature and top_p for non-reasoning models
           if (!isReasoningModel) {
             requestParams.temperature = 0.7;
             requestParams.top_p = 1;
           }
 
           const respAny = await (userOpenai as any).responses.create(requestParams);
-
           let responseText = (respAny.output?.[0]?.content?.[0]?.text as string) || "";
           let totalTokens = respAny.usage?.total_tokens || 0;
 
@@ -467,7 +469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const isReasoningModel = /^(o|gpt-4o)/i.test(activeModel);
+          const isReasoningModel = /^(o1)/i.test(activeModel);
 
           const requestParams: any = {
             model: activeModel,
@@ -476,13 +478,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             max_output_tokens: 1000
           };
 
+          // Only add temperature and top_p for non-reasoning models
           if (!isReasoningModel) {
             requestParams.temperature = 0.7;
             requestParams.top_p = 1;
           }
 
           const respAny = await (userOpenai as any).responses.create(requestParams);
-
           let responseText = (respAny.output?.[0]?.content?.[0]?.text as string) || "";
           let totalTokens = respAny.usage?.total_tokens || 0;
 

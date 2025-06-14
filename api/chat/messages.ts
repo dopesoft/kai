@@ -54,10 +54,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('thread_id', thread_id)
       .order('created_at', { ascending: true });
 
-    // Add user filter if provided
-    if (user_id && typeof user_id === 'string') {
-      query = query.eq('user_id', user_id);
-    }
+    // Note: user_id filtering is done via thread_id since chat_messages doesn't have user_id column
+    // The user_id is stored in metadata instead
 
     const { data, error } = await query;
 

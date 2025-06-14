@@ -158,24 +158,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Add user message
     messages.push({ role: 'user', content: message });
 
-    // Create streaming completion
-    const stream = await openai.chat.completions.create({
-      model: model || 'gpt-4',
-      messages,
-      stream: true,
-      temperature: 0.7,
-      max_completion_tokens: 2000
-    });
-
-    // Stream the response
-    let fullResponse = '';
+    // Use responses API for ALL models
+    const activeModel = model || 'gpt-4';
+    const isReasoningModel = /^(o1)/i.test(activeModel);
     
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        fullResponse += content;
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
-      }
+    const systemContent = messages.find(m => m.role === 'system')?.content || '';
+    const userContent = messages.find(m => m.role === 'user')?.content || '';
+    
+    const requestParams: any = {
+      model: activeModel,
+      instructions: systemContent,
+      input: userContent,
+      max_output_tokens: 2000
+    };
+
+    // Only add temperature and top_p for non-reasoning models
+    if (!isReasoningModel) {
+      requestParams.temperature = 0.7;
+      requestParams.top_p = 1;
+    }
+    
+    const response = await (openai as any).responses.create(requestParams);
+    const fullResponse = response.output?.[0]?.content?.[0]?.text || '';
+    
+    // Stream the response word by word to simulate streaming
+    const words = fullResponse.split(' ');
+    for (let i = 0; i < words.length; i++) {
+      const word = i === 0 ? words[i] : ' ' + words[i];
+      res.write(`data: ${JSON.stringify({ content: word })}\n\n`);
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
 
     // Save the conversation to database if we have the necessary info
@@ -185,9 +196,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('chat_messages')
         .insert({
           thread_id: threadId,
-          user_id: userId,
           role: 'user',
-          content: message
+          content: message,
+          metadata: { user_id: userId }
         });
 
       // Save assistant response
@@ -195,9 +206,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('chat_messages')
         .insert({
           thread_id: threadId,
-          user_id: userId,
           role: 'assistant',
-          content: fullResponse
+          content: fullResponse,
+          metadata: { user_id: userId, model: activeModel }
         });
 
       // Extract and save memories
