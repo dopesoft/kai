@@ -520,6 +520,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "user_id and thread_id are required" });
       }
       
+      // Check if Supabase admin is initialized
+      if (!supabaseAdmin) {
+        console.error('❌ Supabase admin client is not initialized');
+        return res.status(500).json({ 
+          error: "Database connection not configured",
+          details: "Supabase admin client not initialized"
+        });
+      }
+      
       const { data, error } = await supabaseAdmin
         .from('chat_threads')
         .insert({
@@ -532,14 +541,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .single();
       
       if (error) {
-        console.error('Error creating chat thread:', error);
-        return res.status(500).json({ error: "Failed to create thread" });
+        console.error('Error creating chat thread:', {
+          error,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        return res.status(500).json({ 
+          error: "Failed to create thread",
+          code: error.code,
+          message: error.message
+        });
       }
       
       res.json(data);
     } catch (error) {
       console.error("Create thread endpoint error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ 
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
   

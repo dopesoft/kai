@@ -14,10 +14,12 @@ export function getSupabase() {
       supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
     } else {
       console.warn('⚠️ Supabase not configured - memory features will be disabled');
-      console.warn('Add SUPABASE_URL and SUPABASE_ANON_KEY to server/.env file');
+      console.warn('Add SUPABASE_URL and SUPABASE_ANON_KEY to environment variables');
       console.warn('Current env:', {
         hasSupabaseUrl: !!process.env.SUPABASE_URL,
-        hasSupabaseKey: !!process.env.SUPABASE_ANON_KEY
+        hasSupabaseKey: !!process.env.SUPABASE_ANON_KEY,
+        supabaseUrlValue: process.env.SUPABASE_URL ? 'Set' : 'Not set',
+        supabaseKeyValue: process.env.SUPABASE_ANON_KEY ? 'Set' : 'Not set'
       });
       supabaseInstance = null;
     }
@@ -31,6 +33,13 @@ export function getSupabaseAdmin() {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+    console.log('🔧 Initializing Supabase admin client...', {
+      hasUrl: !!supabaseUrl,
+      hasServiceKey: !!supabaseServiceRoleKey,
+      urlValue: supabaseUrl ? 'Set' : 'Not set',
+      serviceKeyValue: supabaseServiceRoleKey ? 'Set' : 'Not set'
+    });
+
     if (supabaseUrl && supabaseServiceRoleKey) {
       console.log('✅ Supabase admin client configured successfully');
       supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -41,8 +50,11 @@ export function getSupabaseAdmin() {
         }
       });
     } else {
-      console.warn('⚠️ Supabase admin client not configured - memory operations may fail due to RLS');
-      console.warn('Add SUPABASE_SERVICE_ROLE_KEY to server/.env file');
+      console.error('❌ Supabase admin client not configured - THIS WILL CAUSE ERRORS');
+      console.error('Missing:', {
+        SUPABASE_URL: !supabaseUrl,
+        SUPABASE_SERVICE_ROLE_KEY: !supabaseServiceRoleKey
+      });
       supabaseAdminInstance = null;
     }
   }
@@ -67,12 +79,7 @@ export const supabaseAdmin = new Proxy({} as any, {
     if (instance) {
       return instance[prop as keyof SupabaseClient];
     }
-    // If no admin client, fall back to regular client and warn
-    console.warn('⚠️ Admin client not available, falling back to regular client');
-    const regularInstance = getSupabase();
-    if (regularInstance) {
-      return regularInstance[prop as keyof SupabaseClient];
-    }
-    return undefined;
+    // If no admin client, throw error for better debugging
+    throw new Error(`Supabase admin client not initialized. Check environment variables: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY`);
   }
 });
