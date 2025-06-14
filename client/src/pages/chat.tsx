@@ -38,31 +38,39 @@ export default function Chat() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Determine the effective user identifier (real auth user or anonymous fallback)
+  const getEffectiveUserId = () => {
+    const anon = localStorage.getItem('anon_user_id');
+    return user?.id || anon || null;
+  };
+
+  const effectiveUserId = getEffectiveUserId();
+
   // Fetch threads from database
   const { data: threads = [], refetch: refetchThreads } = useQuery({
-    queryKey: ['threads', user?.id],
+    queryKey: ['threads', effectiveUserId],
     queryFn: async () => {
-      if (!user?.id) return [];
-      const response = await fetch(`/api/chat/threads?user_id=${user.id}`);
+      if (!effectiveUserId) return [];
+      const response = await fetch(`/api/chat/threads?user_id=${effectiveUserId}`);
       if (!response.ok) throw new Error('Failed to fetch threads');
       return response.json();
     },
-    enabled: !!user?.id,
+    enabled: !!effectiveUserId,
   });
 
   // Fetch messages when thread changes
   useEffect(() => {
-    if (activeThreadId && user?.id) {
+    if (activeThreadId && effectiveUserId) {
       fetchThreadMessages(activeThreadId);
     } else {
       setCurrentMessages([]);
       setCurrentThread(null);
     }
-  }, [activeThreadId, user?.id]);
+  }, [activeThreadId, effectiveUserId]);
 
   const fetchThreadMessages = async (threadId: string) => {
     try {
-      const response = await fetch(`/api/chat/threads/${threadId}?user_id=${user?.id}`);
+      const response = await fetch(`/api/chat/threads/${threadId}?user_id=${effectiveUserId}`);
       if (!response.ok) throw new Error('Failed to fetch thread');
       const threadData = await response.json();
       
@@ -85,12 +93,20 @@ export default function Chat() {
 
   const createThreadMutation = useMutation({
     mutationFn: async (title: string) => {
+      // Ensure we have some form of user identifier even when auth is disabled
+      const existingAnonId = localStorage.getItem('anon_user_id');
+      const fallbackUserId = existingAnonId || nanoid();
+      if (!existingAnonId) {
+        localStorage.setItem('anon_user_id', fallbackUserId);
+      }
+
       const threadId = nanoid();
+
       const response = await fetch('/api/chat/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: user?.id,
+          user_id: effectiveUserId ?? fallbackUserId,
           thread_id: threadId,
           title
         })
@@ -159,10 +175,10 @@ export default function Chat() {
   // Restore active thread on mount (from localStorage)
   useEffect(() => {
     const storedThreadId = localStorage.getItem('activeThreadId');
-    if (storedThreadId && user?.id) {
+    if (storedThreadId && effectiveUserId) {
       setActiveThreadId(storedThreadId);
     }
-  }, [user?.id]);
+  }, [effectiveUserId]);
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
@@ -176,8 +192,8 @@ export default function Chat() {
         // Create thread in database
         threadToUse = await createThreadMutation.mutateAsync(title);
         setCurrentThread(threadToUse);
-        setActiveThreadId(threadToUse.thread_id);
-        localStorage.setItem('activeThreadId', threadToUse.thread_id);
+        setActiveThreadId(threadToUse!.thread_id);
+        localStorage.setItem('activeThreadId', threadToUse!.thread_id);
       }
 
       // Check for verified integrations
@@ -205,8 +221,8 @@ export default function Chat() {
         message,
         apiKey,
         model,
-        userId: user?.id,
-        threadId: threadToUse.thread_id
+        userId: effectiveUserId || undefined,
+        threadId: threadToUse!.thread_id
       };
 
       // Use streaming endpoint
@@ -284,7 +300,7 @@ export default function Chat() {
                   setCurrentMessages(prev => [...prev, assistantMessage]);
                   
                   // Update thread's updated_at timestamp
-                  queryClient.invalidateQueries({ queryKey: ['threads', user?.id] });
+                  queryClient.invalidateQueries({ queryKey: ['threads', effectiveUserId] });
                   
                   return { content: streamedContent, role: "assistant" as const };
                 }
