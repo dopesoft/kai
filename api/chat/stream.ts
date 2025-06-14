@@ -33,100 +33,105 @@ async function extractMemories(userMessage: string, assistantMessage: string, ap
   
   const openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
   
-  const extractionPrompt = `Analyze this conversation and extract memorable information using STRICT categorization criteria.
+  const extractionPrompt = `You are a memory extraction expert. Your job is to identify and extract factual information about a person from conversation.
 
+CONVERSATION:
 User: ${userMessage}
 Assistant: ${assistantMessage}
 
-## CRITICAL RULES:
-1. LONG-TERM MEMORY = Important facts about the person that will be useful in future conversations (doesn't need to be permanent forever)
-2. SHORT-TERM MEMORY = Temporary, session-specific context that is only relevant to this conversation thread
-3. Focus on capturing meaningful personal information, professional details, and important life context
+TASK: Extract ALL factual information about the user and categorize it correctly.
 
-## LONG-TERM MEMORY Categories:
+SCAN FOR THESE FACTS (extract EVERY one you find):
 
-### Personal
-- **identity**: Full name, nicknames, pronouns, age, birthday
-- **location**: Current city, country, timezone, where they live or work
-- **background**: Birthplace, nationality, languages, cultural background, education
-- **physical**: Health conditions, disabilities, allergies, dietary restrictions
-- **personality**: Traits, values, communication preferences
+PERSONAL FACTS:
+- Names (first, last, nicknames)
+- Age or age-related information
+- Gender/pronouns
+- Location (city, state, country)
+- Background (education, nationality, family origin)
 
-### Professional
-- **career**: Current job title, company, industry, role, responsibilities
-- **expertise**: Skills, certifications, education, specializations, experience level
-- **history**: Past jobs, career changes, major projects, achievements, awards
-- **goals**: Career aspirations, professional development, business interests
+PROFESSIONAL FACTS:
+- Job titles or roles
+- Company names
+- Industry or field of work
+- Skills or expertise mentioned
+- Work history or career details
+- Consulting work or side businesses
 
-### Relationships
-- **family**: Spouse/partner, children, parents, siblings, extended family (with names/details)
-- **social**: Close friends, important relationships, social context
-- **professional**: Colleagues, mentors, business partners, clients (if mentioned)
-- **pets**: Pet names, types, care details
+RELATIONSHIP FACTS:
+- Family members mentioned (spouse, children, parents, siblings)
+- Professional relationships (colleagues, clients, partners)
+- Pets (names, types)
 
-### Preferences & Interests
-- **interests**: Hobbies, passions, entertainment, sports, activities
-- **lifestyle**: Living situation, routines, habits, travel, lifestyle choices
-- **technology**: Devices, platforms, tools they use, tech comfort level
-- **learning**: Areas of interest, learning goals, educational pursuits
+OTHER FACTS:
+- Hobbies or interests mentioned
+- Personal preferences
+- Goals or aspirations (if ongoing/important)
+- Important dates or events
 
-### Events & Context
-- **recurring**: Birthdays, anniversaries, regular commitments
-- **upcoming**: Important events, deadlines, planned activities
-- **historical**: Past achievements, significant life events, milestones
-- **constraints**: Time zones, availability, financial context, limitations
+CURRENT TASKS/TEMPORARY CONTEXT (short-term only):
+- What they're currently trying to do
+- Immediate problems or questions
+- Current mood or feelings in this conversation
+- Session-specific requests
 
-## SHORT-TERM MEMORY Categories (TEMPORARY CONTEXT):
+EXAMPLE INPUT: "My name is Khaya, a 41 year old man and I work at staffingreferrals.com as their head of product, I also do tech consulting for Southwest Airlines. I'm currently trying to figure out ways to be more organized."
 
-### Conversation Context
-- Current topic being discussed
-- Questions asked in this session
-- Temporary goals or concerns (like "trying to be more organized")
-- Current problems they're working on
-- This session's mood or feelings
-
-### Task Context
-- Current projects being discussed
-- Immediate next steps
-- Session-specific preferences
-- Tools or methods they want to try
-
-## EXAMPLES:
-✅ "My name is John" → LONG-TERM: personal/identity
-✅ "I'm 35 years old" → LONG-TERM: personal/identity  
-✅ "I work at Google as a software engineer" → LONG-TERM: professional/career
-✅ "I live in San Francisco" → LONG-TERM: personal/location
-✅ "My wife's name is Sarah" → LONG-TERM: relationships/family
-✅ "My wife is a doctor" → LONG-TERM: relationships/family
-✅ "I have a Masters in Computer Science" → LONG-TERM: professional/expertise
-✅ "I won the Employee of the Year award in 2023" → LONG-TERM: professional/history
-✅ "I love playing guitar" → LONG-TERM: preferences/interests
-✅ "I have two cats named Milo and Luna" → LONG-TERM: relationships/pets
-❌ "I'm trying to find ways to be more organized" → SHORT-TERM (current goal/task)
-❌ "I'm feeling stressed today" → SHORT-TERM (temporary emotional state)
-❌ "For this project, I want a formal tone" → SHORT-TERM (session preference)
-❌ "I'm currently working on a presentation" → SHORT-TERM (active task)
-
-Return JSON with this exact structure:
+EXPECTED OUTPUT:
 {
   "short_term": [
     {
-      "display": "Natural language description",
-      "tags": ["conversation", "current_goal", "mood", etc.]
+      "display": "Currently trying to figure out ways to be more organized",
+      "tags": ["current_goal", "productivity"]
     }
   ],
   "long_term": [
     {
-      "category": "personal|professional|relationships|preferences|events|context",
-      "key": "snake_case_identifier", 
-      "value": "actual_value",
-      "display": "Natural language description",
-      "importance": 1-5
+      "category": "personal",
+      "key": "full_name",
+      "value": "Khaya",
+      "display": "User's name is Khaya",
+      "importance": 5
+    },
+    {
+      "category": "personal", 
+      "key": "age",
+      "value": "41",
+      "display": "User is 41 years old",
+      "importance": 4
+    },
+    {
+      "category": "personal",
+      "key": "gender",
+      "value": "man",
+      "display": "User identifies as a man",
+      "importance": 3
+    },
+    {
+      "category": "professional",
+      "key": "current_job_title",
+      "value": "head of product",
+      "display": "Works as head of product",
+      "importance": 5
+    },
+    {
+      "category": "professional",
+      "key": "current_company",
+      "value": "staffingreferrals.com",
+      "display": "Works at staffingreferrals.com",
+      "importance": 5
+    },
+    {
+      "category": "professional",
+      "key": "consulting_work",
+      "value": "tech consulting for Southwest Airlines",
+      "display": "Does tech consulting for Southwest Airlines",
+      "importance": 4
     }
   ]
 }
 
-Capture meaningful facts about the person that would be useful to remember in future conversations.`;
+NOW EXTRACT FROM THE ACTUAL CONVERSATION ABOVE. Be thorough - extract EVERY factual detail about the person.`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -136,7 +141,7 @@ Capture meaningful facts about the person that would be useful to remember in fu
         { role: "user", content: extractionPrompt }
       ],
       temperature: 0.7,
-      max_completion_tokens: 1000
+      max_tokens: 1000
     });
 
     // Extract the assistant's response

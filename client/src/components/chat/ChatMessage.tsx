@@ -18,6 +18,11 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
   const { theme } = useTheme();
   const { toast } = useToast();
   const [isHovered, setIsHovered] = useState(false);
+  
+  // Debug logging
+  if (role === "assistant" && memoryCount) {
+    console.log('🧠 ChatMessage received memoryCount:', memoryCount, 'for content:', content.substring(0, 50) + '...');
+  }
 
   const handleCopy = async () => {
     try {

@@ -432,6 +432,7 @@ export default function Chat() {
                   
                   if (totalCount > 0) {
                     // Store the memory count for the next assistant message that will be created
+                    console.log('🧠 Storing memory count in localStorage:', totalCount);
                     localStorage.setItem('nextMemoryCount', totalCount.toString());
                   }
                 } else if (data.type === 'thread_info') {
@@ -465,10 +466,13 @@ export default function Chat() {
                   
                   // Get memory count and store it for this message
                   const memoryCount = localStorage.getItem('nextMemoryCount');
+                  console.log('🧠 Retrieved memory count from localStorage:', memoryCount);
                   if (memoryCount) {
+                    const count = parseInt(memoryCount, 10);
+                    console.log('🧠 Setting memory count for message', assistantMessage.id, ':', count);
                     setMemoryCounts(prev => ({
                       ...prev,
-                      [assistantMessage.id]: parseInt(memoryCount, 10)
+                      [assistantMessage.id]: count
                     }));
                     localStorage.removeItem('nextMemoryCount');
                   }
