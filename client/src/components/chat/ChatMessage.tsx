@@ -36,6 +36,11 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
     // Ensure headers have proper spacing
     processed = processed.replace(/^(#{1,6}) /gm, '\n$1 ');
     
+    // Bold section headers (text followed by colon at start of line or after newline)
+    // Matches patterns like "Section Name:" or "Important Note:" at the beginning of lines
+    processed = processed.replace(/^([A-Za-z][A-Za-z\s]+):/gm, '**$1:**');
+    processed = processed.replace(/\n([A-Za-z][A-Za-z\s]+):/g, '\n**$1:**');
+    
     // Clean up extra newlines
     processed = processed.replace(/\n{3,}/g, '\n\n');
     

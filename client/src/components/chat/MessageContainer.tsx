@@ -74,6 +74,28 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
     }
   }, [isStreaming, streamingContent]);
 
+  // Auto-scroll to bottom when AI message is complete (to show timestamp)
+  useEffect(() => {
+    const container = containerRef.current;
+    const prevLen = prevMessagesLength.current;
+    
+    // Check if a new assistant message was just added
+    if (
+      container &&
+      messages.length > prevLen &&
+      messages.length > 0 &&
+      messages[messages.length - 1].role === "assistant"
+    ) {
+      // Small delay to ensure DOM is updated and timestamp is rendered
+      setTimeout(() => {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: "smooth",
+        });
+      }, 100);
+    }
+  }, [messages]);
+
   return (
     <main className="h-full relative z-10 overflow-hidden">
       <div
