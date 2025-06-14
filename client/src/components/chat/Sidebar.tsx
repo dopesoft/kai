@@ -31,7 +31,18 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThreadId, onThreadDelete, threads }: SidebarProps) {
   const [location, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { user, profile, authEnabled } = useAuth();
+  const { user, profile, authEnabled, signOut } = useAuth();
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // Navigate to home page after logout
+      setLocation('/');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
 
   // Get user's first name from profile
   const getFirstName = () => {
@@ -191,21 +202,54 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
           <div className="p-3 border-t border-gray-300 dark:border-gray-600">
             <div className="flex items-center justify-between">
               {authEnabled && user ? (
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
-                    {getUserInitials()}
-                  </div>
-                  <span className="text-sm text-[#666666] dark:text-white">
-                    {getFirstName() || "User"}
-                  </span>
-                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-800 rounded p-1 transition-colors">
+                      <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
+                        {getUserInitials()}
+                      </div>
+                      <span className="text-sm text-[#666666] dark:text-white">
+                        {getFirstName() || "User"}
+                      </span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 mb-2">
+                    <DropdownMenuItem 
+                      onClick={() => setLocation("/settings")}
+                      className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+                    >
+                      <User className="w-4 h-4" />
+                      Profile Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : (
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
-                    U
-                  </div>
-                  <span className="text-sm text-[#666666] dark:text-white">User</span>
-                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-800 rounded p-1 transition-colors">
+                      <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
+                        U
+                      </div>
+                      <span className="text-sm text-[#666666] dark:text-white">User</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 mb-2">
+                    <DropdownMenuItem 
+                      onClick={() => setLocation("/settings")}
+                      className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+                    >
+                      <User className="w-4 h-4" />
+                      Settings
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               <div className="flex items-center gap-1">
                 <Button
