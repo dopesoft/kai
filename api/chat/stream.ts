@@ -47,8 +47,9 @@ PERSONAL FACTS:
 - Names (first, last, nicknames)
 - Age or age-related information
 - Gender/pronouns
-- Location (city, state, country)
+- Location (city, state, country, where they live, where they moved to)
 - Background (education, nationality, family origin)
+- Life events (moving, traveling, major changes)
 
 PROFESSIONAL FACTS:
 - Job titles or roles
@@ -59,25 +60,64 @@ PROFESSIONAL FACTS:
 - Consulting work or side businesses
 
 RELATIONSHIP FACTS:
-- Family members mentioned (spouse, children, parents, siblings)
+- Family members mentioned (spouse, wife, husband, children, parents, siblings)
 - Professional relationships (colleagues, clients, partners)
 - Pets (names, types)
+- Relationship status or events
 
 OTHER FACTS:
 - Hobbies or interests mentioned
 - Personal preferences
 - Goals or aspirations (if ongoing/important)
 - Important dates or events
+- Places they want to visit or explore
+- How long they've lived somewhere
 
 CURRENT TASKS/TEMPORARY CONTEXT (short-term only):
-- What they're currently trying to do
+- What they're currently trying to do today/this week
 - Immediate problems or questions
 - Current mood or feelings in this conversation
 - Session-specific requests
+- Today's plans or activities
 
-EXAMPLE INPUT: "My name is Khaya, a 41 year old man and I work at staffingreferrals.com as their head of product, I also do tech consulting for Southwest Airlines. I'm currently trying to figure out ways to be more organized."
+EXAMPLE 1: "My name is Khaya, a 41 year old man and I work at staffingreferrals.com as their head of product, I also do tech consulting for Southwest Airlines. I'm currently trying to figure out ways to be more organized."
 
-EXPECTED OUTPUT:
+EXAMPLE 2: "today my wife and i are going to explore Dallas TX, as we moved here 2 years ago and still haven't visited a lot of places."
+
+EXPECTED OUTPUT FOR EXAMPLE 2:
+{
+  "short_term": [
+    {
+      "display": "Planning to explore Dallas TX with wife today",
+      "tags": ["today_plans", "activities"]
+    }
+  ],
+  "long_term": [
+    {
+      "category": "relationships",
+      "key": "marital_status", 
+      "value": "married",
+      "display": "User is married (has a wife)",
+      "importance": 5
+    },
+    {
+      "category": "personal",
+      "key": "current_location",
+      "value": "Dallas, TX",
+      "display": "Lives in Dallas, TX",
+      "importance": 5
+    },
+    {
+      "category": "personal",
+      "key": "moved_to_dallas",
+      "value": "2 years ago",
+      "display": "Moved to Dallas 2 years ago",
+      "importance": 4
+    }
+  ]
+}
+
+EXPECTED OUTPUT FOR EXAMPLE 1:
 {
   "short_term": [
     {
@@ -383,100 +423,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('✅ Assistant message saved to chat_messages:', assistantData);
       }
 
-      // Extract and save memories using AI analysis - do this in background
-      console.log('🎯 Starting memory extraction in background...');
+      // Extract and save memories using AI analysis
+      console.log('🎯 Attempting to extract and save memories...');
+      const extractedMemories = await extractMemories(message, fullResponse, apiKey);
       
-      // Start memory extraction but don't wait for it
-      extractMemories(message, fullResponse, apiKey).then(async (extractedMemories) => {
-        console.log('📊 Extracted memories:', {
-          shortTermCount: extractedMemories.short_term?.length || 0,
-          longTermCount: extractedMemories.long_term?.length || 0,
-          shortTermMemories: extractedMemories.short_term,
-          longTermMemories: extractedMemories.long_term
-        });
-
-        // Save short-term memories
-        if (extractedMemories.short_term && extractedMemories.short_term.length > 0) {
-          console.log(`💾 Saving ${extractedMemories.short_term.length} short-term memories...`);
-          for (const memory of extractedMemories.short_term) {
-            const { error } = await supabaseAdmin.from('short_term_memory').insert({
-              user_id: userId,
-              thread_id: threadId,
-              message: memory.display,
-              display_text: memory.display,
-              sender: 'system',
-              tags: memory.tags || ['auto-captured'],
-              metadata: { auto_captured: true }
-            });
-            if (error) {
-              console.error('❌ Short-term memory save error:', error);
-            }
-          }
-        }
-
-        // Save long-term memories with embeddings
-        if (extractedMemories.long_term && extractedMemories.long_term.length > 0) {
-          console.log(`💾 Saving ${extractedMemories.long_term.length} long-term memories...`);
-          for (const memory of extractedMemories.long_term) {
-            const embedding = await generateEmbedding(memory.value, apiKey);
-            
-            const { error } = await supabaseAdmin.from('long_term_memory').insert({
-              user_id: userId,
-              category: memory.category,
-              key: memory.key,
-              value: memory.value,
-              display_text: memory.display,
-              importance: memory.importance || 3,
-              embedding: embedding,
-              metadata: { 
-                auto_captured: true,
-                subcategory: memory.key.split('_')[0],
-                extracted_from: 'conversation'
-              }
-            });
-            if (error) {
-              console.error('❌ Long-term memory save error:', error);
-            } else {
-              console.log('✅ Long-term memory saved:', { 
-                category: memory.category, 
-                key: memory.key, 
-                value: memory.value,
-                importance: memory.importance 
-              });
-            }
-          }
-        }
-
-        console.log('✅ Memory extraction and saving completed');
-      }).catch(error => {
-        console.error('❌ Memory extraction failed:', error);
+      // Log what was extracted
+      console.log('📊 Extracted memories:', {
+        shortTermCount: extractedMemories.short_term?.length || 0,
+        longTermCount: extractedMemories.long_term?.length || 0,
+        shortTermMemories: extractedMemories.short_term,
+        longTermMemories: extractedMemories.long_term
       });
 
-      // Send immediate memory update notification (optimistic - assume memories will be extracted)
-      // This gives immediate feedback while extraction happens in background
-      const estimatedMemoryCount = message.split(' ').filter(word => 
-        word.match(/^[A-Z][a-z]+$/) || // Capitalized words (names)
-        word.includes('@') || // Emails/companies
-        word.match(/^\d+$/) || // Numbers (age)
-        word.toLowerCase().includes('work') ||
-        word.toLowerCase().includes('company') ||
-        word.toLowerCase().includes('job')
-      ).length;
-      
-      const hasPersonalInfo = message.toLowerCase().includes('name') || 
-                             message.toLowerCase().includes('age') ||
-                             message.toLowerCase().includes('work') ||
-                             message.toLowerCase().includes('company');
-      
-      if (hasPersonalInfo && estimatedMemoryCount > 2) {
-        res.write(`data: ${JSON.stringify({ 
-          type: 'memory_update',
-          memories: {
-            short_term: estimatedMemoryCount > 1 ? [{ display: "Processing current context..." }] : [],
-            long_term: estimatedMemoryCount > 3 ? Array(Math.min(estimatedMemoryCount - 1, 6)).fill({ display: "Processing personal information..." }) : []
+      // Save short-term memories
+      if (extractedMemories.short_term && extractedMemories.short_term.length > 0) {
+        console.log(`💾 Saving ${extractedMemories.short_term.length} short-term memories...`);
+        for (const memory of extractedMemories.short_term) {
+          const { error } = await supabaseAdmin.from('short_term_memory').insert({
+            user_id: userId,
+            thread_id: threadId,
+            message: memory.display,
+            display_text: memory.display,
+            sender: 'system',
+            tags: memory.tags || ['auto-captured'],
+            metadata: { auto_captured: true }
+          });
+          if (error) {
+            console.error('❌ Short-term memory save error:', error);
           }
-        })}\n\n`);
+        }
       }
+
+      // Save long-term memories with embeddings
+      if (extractedMemories.long_term && extractedMemories.long_term.length > 0) {
+        console.log(`💾 Saving ${extractedMemories.long_term.length} long-term memories...`);
+        for (const memory of extractedMemories.long_term) {
+          const embedding = await generateEmbedding(memory.value, apiKey);
+          
+          const { error } = await supabaseAdmin.from('long_term_memory').insert({
+            user_id: userId,
+            category: memory.category,
+            key: memory.key,
+            value: memory.value,
+            display_text: memory.display,
+            importance: memory.importance || 3,
+            embedding: embedding,
+            metadata: { 
+              auto_captured: true,
+              subcategory: memory.key.split('_')[0],
+              extracted_from: 'conversation'
+            }
+          });
+          if (error) {
+            console.error('❌ Long-term memory save error:', error);
+          } else {
+            console.log('✅ Long-term memory saved:', { 
+              category: memory.category, 
+              key: memory.key, 
+              value: memory.value,
+              importance: memory.importance 
+            });
+          }
+        }
+      }
+
+      // Send memory update notification with actual extracted memories
+      res.write(`data: ${JSON.stringify({ 
+        type: 'memory_update',
+        memories: extractedMemories
+      })}\n\n`);
     }
 
     // Send done signal
