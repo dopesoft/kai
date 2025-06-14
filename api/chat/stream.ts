@@ -341,7 +341,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
     
-    // Add user message
+    // Fetch previous messages from this thread to maintain context
+    if (threadId && supabaseAdmin) {
+      console.log('📚 Fetching conversation history for thread:', threadId);
+      const { data: previousMessages, error } = await supabaseAdmin
+        .from('chat_messages')
+        .select('*')
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: true });
+      
+      if (error) {
+        console.error('❌ Failed to fetch previous messages:', error);
+      } else if (previousMessages && previousMessages.length > 0) {
+        console.log(`📚 Found ${previousMessages.length} previous messages in thread`);
+        // Add all previous messages to maintain full context
+        for (const msg of previousMessages) {
+          messages.push({
+            role: msg.role,
+            content: msg.content
+          });
+        }
+      }
+    }
+    
+    // Add current user message
     messages.push({ role: 'user', content: message });
 
     // Use chat completions API with streaming
