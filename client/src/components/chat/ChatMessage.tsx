@@ -24,6 +24,24 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
     console.log('🧠 ChatMessage received memoryCount:', memoryCount, 'for content:', content.substring(0, 50) + '...');
   }
 
+  // Preprocess content to fix bullet points and formatting
+  const preprocessContent = (text: string): string => {
+    // Convert bullet character (•) at start of lines to markdown list
+    let processed = text.replace(/^• /gm, '- ');
+    processed = processed.replace(/\n• /g, '\n- ');
+    
+    // Ensure numbered lists have proper formatting
+    processed = processed.replace(/^(\d+)\. /gm, '$1. ');
+    
+    // Ensure headers have proper spacing
+    processed = processed.replace(/^(#{1,6}) /gm, '\n$1 ');
+    
+    // Clean up extra newlines
+    processed = processed.replace(/\n{3,}/g, '\n\n');
+    
+    return processed.trim();
+  };
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
@@ -131,7 +149,7 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
                   ),
                 }}
               >
-                {content}
+                {preprocessContent(content)}
               </ReactMarkdown>
             ) : (
               content
