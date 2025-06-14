@@ -158,8 +158,10 @@ Only extract clear, factual information. Be very selective.`;
   try {
     const response = await (client as any).responses.create({
       model: "gpt-4",
-      instructions: "Extract memories from the conversation following the JSON format specified.",
-      input: extractionPrompt,
+      messages: [
+        { role: "system", content: "Extract memories from the conversation following the JSON format specified." },
+        { role: "user", content: extractionPrompt }
+      ],
       temperature: 0.7,
       max_output_tokens: 1000
     });
@@ -322,10 +324,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
 
+          // Use responses API with messages format
+          const messages = [
+            { role: "system", content: systemContent },
+            { role: "user", content: message }
+          ];
+
           const requestParams: any = {
             model: activeModel,
-            instructions: systemContent,
-            input: message,
+            messages: messages,
             max_output_tokens: 1000
           };
 
@@ -587,10 +594,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
 
+          // Use responses API with messages format
+          const messages = [
+            { role: "system", content: systemContent },
+            { role: "user", content: message }
+          ];
+
           const requestParams: any = {
             model: activeModel,
-            instructions: systemContent,
-            input: message,
+            messages: messages,
             max_output_tokens: 1000
           };
 

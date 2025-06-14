@@ -127,8 +127,10 @@ Only extract clear, factual information. Be very selective.`;
   try {
     const response = await (openai as any).responses.create({
       model: "gpt-4",
-      instructions: "Extract memories from the conversation following the JSON format specified.",
-      input: extractionPrompt,
+      messages: [
+        { role: "system", content: "Extract memories from the conversation following the JSON format specified." },
+        { role: "user", content: extractionPrompt }
+      ],
       temperature: 0.7,
       max_output_tokens: 1000
     });
@@ -310,13 +312,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
     
-    const systemContent = messages.find(m => m.role === 'system')?.content || '';
-    const userContent = messages.find(m => m.role === 'user')?.content || '';
-    
+    // Use messages format for responses API
     const requestParams: any = {
       model: activeModel,
-      instructions: systemContent,
-      input: userContent,
+      messages: messages,
       max_output_tokens: 2000
     };
 

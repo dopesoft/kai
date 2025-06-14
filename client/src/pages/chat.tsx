@@ -278,6 +278,25 @@ export default function Chat() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
+      // Add user message to UI IMMEDIATELY before any async operations
+      const userMessage: Message = {
+        id: Date.now(),
+        content: message,
+        role: "user",
+        timestamp: new Date()
+      };
+      
+      console.log('📝 Adding user message FIRST, current length:', currentMessages.length);
+      setCurrentMessages(prev => {
+        console.log('📝 Previous messages:', prev.length, 'New length:', prev.length + 1);
+        return [...prev, userMessage];
+      });
+      
+      // Show thinking indicator immediately
+      console.log('🤔 Setting typing indicator to true');
+      setIsTyping(true);
+
+      // NOW do async operations
       // If no active thread, create a new one
       let threadToUse = currentThread;
       if (!threadToUse) {
@@ -317,16 +336,6 @@ export default function Chat() {
         }
       }
       
-      // Add user message to UI immediately
-      const userMessage: Message = {
-        id: Date.now(),
-        content: message,
-        role: "user",
-        timestamp: new Date()
-      };
-      
-      setCurrentMessages(prev => [...prev, userMessage]);
-      
       const requestData: ChatRequest = { 
         message,
         apiKey,
@@ -334,10 +343,6 @@ export default function Chat() {
         userId: effectiveUserId || undefined,
         threadId: threadToUse!.thread_id
       };
-
-      // Show thinking indicator immediately
-      console.log('🤔 Setting typing indicator to true');
-      setIsTyping(true);
 
       // Use streaming endpoint
       const response = await fetch("/api/chat/stream", {
