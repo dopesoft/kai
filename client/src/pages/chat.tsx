@@ -475,6 +475,17 @@ export default function Chat() {
                       [assistantMessage.id]: count
                     }));
                     localStorage.removeItem('nextMemoryCount');
+                    
+                    // Auto-scroll to ensure memory notification and action buttons are visible
+                    setTimeout(() => {
+                      const container = document.querySelector('.h-full.overflow-y-auto');
+                      if (container) {
+                        container.scrollTo({
+                          top: container.scrollHeight,
+                          behavior: 'smooth'
+                        });
+                      }
+                    }, 200); // Small delay to ensure DOM has updated
                   }
                   
                   // End streaming mode after message is added
