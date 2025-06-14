@@ -63,7 +63,8 @@ export default function Chat() {
   
   // Fetch messages when thread changes
   useEffect(() => {
-    if (activeThreadId && effectiveUserId) {
+    // Only fetch if we don't already have messages (prevents clearing on new message)
+    if (activeThreadId && effectiveUserId && currentMessages.length === 0) {
       console.log('📥 Loading thread:', activeThreadId);
       fetchThreadMessages(activeThreadId);
     }
@@ -271,17 +272,21 @@ export default function Chat() {
       
       console.log('📝 Adding user message FIRST, current length:', currentMessages.length);
       setCurrentMessages(prev => {
-        console.log('📝 Previous messages:', prev.length, 'New length:', prev.length + 1);
-        return [...prev, userMessage];
+        const newMessages = [...prev, userMessage];
+        console.log('📝 Previous messages:', prev.length, 'New messages:', newMessages.length);
+        console.log('📝 This should trigger chat view since messages > 0');
+        return newMessages;
       });
       
       // Show thinking indicator immediately
       console.log('🤔 Setting typing indicator to true');
       setIsTyping(true);
 
-      // If no active thread, create a new one
+      // ALWAYS create a new thread when sending from welcome screen (no active thread)
       let threadToUse = currentThread;
-      if (!threadToUse) {
+      
+      // If we're on welcome screen (no messages), ALWAYS create new thread
+      if (currentMessages.length === 0 || !activeThreadId || !currentThread) {
         // Generate title from first message
         const words = message.split(' ').slice(0, 4);
         const title = words.join(' ') + (message.split(' ').length > 4 ? '...' : '');
@@ -289,13 +294,25 @@ export default function Chat() {
         // Create thread in database
         try {
           threadToUse = await createThreadMutation.mutateAsync(title);
-          console.log('✅ Created thread:', threadToUse);
+          console.log('✅ Created NEW thread:', threadToUse);
           setCurrentThread(threadToUse);
           setActiveThreadId(threadToUse.thread_id);
           localStorage.setItem('activeThreadId', threadToUse.thread_id);
         } catch (error) {
           console.error('❌ Failed to create thread:', error);
-          // Still continue - we have the message in UI
+          // Create a temporary thread so UI works
+          const tempThread = {
+            thread_id: 'temp-' + Date.now(),
+            title: title,
+            user_id: effectiveUserId || 'anon',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            archived: false,
+            metadata: {}
+          };
+          threadToUse = tempThread;
+          setCurrentThread(tempThread);
+          setActiveThreadId(tempThread.thread_id);
         }
       }
 
@@ -450,7 +467,6 @@ export default function Chat() {
       setIsTyping(false);
       setIsStreaming(false);
       setStreamingContent("");
-      setIsCreatingThread(false); // Reset flag on error
       
       // Don't clear messages on error - keep the user message visible
       // Remove the last message only if it was the user message we just added
@@ -467,6 +483,13 @@ export default function Chat() {
         description: error instanceof Error ? error.message : "Failed to send message. Please try again.",
         variant: "destructive",
       });
+    },
+    onSuccess: () => {
+      console.log('✅ Message sent successfully');
+      // Ensure we're showing chat view
+      if (currentMessages.length > 0) {
+        console.log('✅ Messages exist, should be showing chat view');
+      }
     },
     onSettled: () => {
       setIsTyping(false);
@@ -487,6 +510,12 @@ export default function Chat() {
 
   // Simple rule: Show conversation view if we have any messages
   const showChatView = currentMessages.length > 0;
+  console.log('🎨 View decision:', { 
+    showChatView, 
+    messageCount: currentMessages.length,
+    activeThreadId,
+    currentThread: currentThread?.thread_id
+  });
 
   return (
     <div className="h-screen flex bg-white dark:bg-black relative overflow-hidden">
