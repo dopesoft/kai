@@ -132,7 +132,7 @@ Only extract clear, factual information. Be very selective.`;
         { role: "user", content: extractionPrompt }
       ],
       temperature: 0.7,
-      max_tokens: 1000
+      max_completion_tokens: 1000
     });
 
     // Extract the assistant's response
@@ -305,7 +305,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const requestParams: any = {
       model: activeModel,
       messages: messages,
-      max_tokens: 2000,
+      max_completion_tokens: 2000,
       stream: true
     };
 
