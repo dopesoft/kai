@@ -63,9 +63,12 @@ export default function Chat() {
 
   // Fetch messages when thread changes
   useEffect(() => {
+    console.log('🔄 useEffect triggered - activeThreadId changed:', { activeThreadId, effectiveUserId });
     if (activeThreadId && effectiveUserId) {
+      console.log('✅ Calling fetchThreadMessages for:', activeThreadId);
       fetchThreadMessages(activeThreadId);
     } else {
+      console.log('❌ Clearing messages - missing activeThreadId or effectiveUserId');
       setCurrentMessages([]);
       setCurrentThread(null);
     }
@@ -73,6 +76,8 @@ export default function Chat() {
 
   const fetchThreadMessages = async (threadId: string) => {
     try {
+      console.log('🔍 fetchThreadMessages called with:', { threadId, effectiveUserId });
+      
       // Validate inputs before making the request
       if (!threadId || !effectiveUserId) {
         console.warn('Missing threadId or effectiveUserId:', { threadId, effectiveUserId });
@@ -83,6 +88,7 @@ export default function Chat() {
       console.log('Fetching thread messages from:', url);
       
       const response = await fetch(url);
+      console.log('📥 Response received:', { status: response.status, ok: response.ok });
       
       // Check if response is ok before trying to parse JSON
       if (!response.ok) {
@@ -105,16 +111,24 @@ export default function Chat() {
       }
       
       const threadData = await response.json();
+      console.log('📋 Thread data received:', { 
+        threadId: threadData.thread_id, 
+        messageCount: threadData.messages?.length || 0,
+        title: threadData.title 
+      });
       
       setCurrentThread(threadData);
-      setCurrentMessages(threadData.messages.map((msg: any) => ({
+      const mappedMessages = threadData.messages ? threadData.messages.map((msg: any) => ({
         id: msg.id,
         content: msg.content,
         role: msg.role,
         timestamp: new Date(msg.created_at)
-      })));
+      })) : [];
+      
+      console.log('✅ Setting messages:', { count: mappedMessages.length });
+      setCurrentMessages(mappedMessages);
     } catch (error) {
-      console.error('Failed to fetch thread messages:', error);
+      console.error('❌ Failed to fetch thread messages:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to load conversation history",
@@ -194,10 +208,11 @@ export default function Chat() {
   };
 
   const handleThreadSelect = (threadId: string) => {
-    console.log('handleThreadSelect:', { threadId, effectiveUserId });
+    console.log('🎯 handleThreadSelect called:', { threadId, effectiveUserId, currentActiveThread: activeThreadId });
     setActiveThreadId(threadId);
     // Store in localStorage for page refresh persistence
     localStorage.setItem('activeThreadId', threadId);
+    console.log('✅ Updated activeThreadId to:', threadId);
   };
 
   const handleThreadDelete = async (threadId: string) => {
@@ -263,19 +278,13 @@ export default function Chat() {
       
       // Fallback to localStorage if not in database
       if (!apiKey) {
-        const verifiedIntegrations = JSON.parse(localStorage.getItem("verified_integrations") || "[]");
-        const openaiIntegration = verifiedIntegrations.find((i: any) => i.provider === "openai");
-        
-        if (!openaiIntegration) {
-          throw new Error("No verified AI integration found. Please configure an OpenAI integration in Settings.");
-        }
-        
+        // Check if there's an API key in localStorage (indicating a valid integration)
         apiKey = localStorage.getItem("chatgpt_api_key") || undefined;
         model = localStorage.getItem("chatgpt_model") || undefined;
-      }
-      
-      if (!apiKey) {
-        throw new Error("No API key found. Please configure an AI integration in Settings.");
+        
+        if (!apiKey) {
+          throw new Error("No API key found. Please configure an OpenAI integration in Settings.");
+        }
       }
       
       // Add user message to UI immediately
