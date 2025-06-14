@@ -510,12 +510,6 @@ export default function Chat() {
 
   // Simple rule: Show conversation view if we have any messages
   const showChatView = currentMessages.length > 0;
-  console.log('🎨 View decision:', { 
-    showChatView, 
-    messageCount: currentMessages.length,
-    activeThreadId,
-    currentThread: currentThread?.thread_id
-  });
 
   return (
     <div className="h-screen flex bg-white dark:bg-black relative overflow-hidden">

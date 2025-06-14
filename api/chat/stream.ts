@@ -125,31 +125,20 @@ Examples:
 Only extract clear, factual information. Be very selective.`;
 
   try {
-    const response = await (openai as any).responses.create({
+    const response = await openai.chat.completions.create({
       model: "gpt-4",
-      input: [
+      messages: [
         { role: "system", content: "Extract memories from the conversation following the JSON format specified." },
         { role: "user", content: extractionPrompt }
       ],
       temperature: 0.7,
-      max_output_tokens: 1000
+      max_tokens: 1000
     });
 
-    // Extract the assistant's response (not the reasoning part)
+    // Extract the assistant's response
     let content = '{"short_term":[],"long_term":[]}';
-    if (response.output && Array.isArray(response.output)) {
-      // Look for the assistant's response in the output array
-      for (const output of response.output) {
-        if (output.role === 'assistant' && output.content && output.content[0]?.text) {
-          content = output.content[0].text;
-          break;
-        }
-      }
-      
-      // Fallback: if no assistant role found, try the first content item
-      if (content === '{"short_term":[],"long_term":[]}' && response.output[0]?.content?.[0]?.text) {
-        content = response.output[0].content[0].text;
-      }
+    if (response.choices && response.choices[0]?.message?.content) {
+      content = response.choices[0].message.content;
     }
     
     console.log('📝 Raw extraction response:', content);
@@ -306,17 +295,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Add user message
     messages.push({ role: 'user', content: message });
 
-    // Use responses API for ALL models
+    // Use chat completions API with streaming
     const activeModel = model || 'gpt-4';
     const isReasoningModel = /^(o[1-9]|gpt-4\.1)/i.test(activeModel);
     
     console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
     
-    // Use input parameter for responses API
+    // Use messages parameter for chat completions API
     const requestParams: any = {
       model: activeModel,
-      input: messages,
-      max_output_tokens: 2000
+      messages: messages,
+      max_tokens: 2000,
+      stream: true
     };
 
     // Only add temperature and top_p for non-reasoning models
@@ -328,44 +318,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`🚫 Skipping temperature for reasoning model: ${activeModel}`);
     }
     
-    const response = await (openai as any).responses.create(requestParams);
+    const stream = await openai.chat.completions.create(requestParams);
     
-    // Debug: Log the full response structure
-    console.log('🔍 Full response structure:', JSON.stringify(response, null, 2));
-    
-    // Extract the assistant's response (not the reasoning part)
+    // Stream the response
     let fullResponse = '';
-    if (response.output && Array.isArray(response.output)) {
-      console.log(`📊 Output array has ${response.output.length} items`);
-      
-      // Look for the assistant's response in the output array
-      for (let i = 0; i < response.output.length; i++) {
-        const output = response.output[i];
-        console.log(`📋 Output ${i}:`, { role: output.role, hasContent: !!output.content, contentLength: output.content?.[0]?.text?.length });
-        
-        if (output.role === 'assistant' && output.content && output.content[0]?.text) {
-          fullResponse = output.content[0].text;
-          console.log(`✅ Found assistant response at index ${i}`);
-          break;
-        }
-      }
-      
-      // Fallback: if no assistant role found, try the first content item
-      if (!fullResponse && response.output[0]?.content?.[0]?.text) {
-        fullResponse = response.output[0].content[0].text;
-        console.log(`⚠️ Using fallback from index 0`);
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (content) {
+        fullResponse += content;
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
       }
     }
     
-    console.log(`📝 Extracted response length: ${fullResponse.length}, preview: ${fullResponse.substring(0, 100)}...`);
-    
-    // Stream the response word by word to simulate streaming
-    const words = fullResponse.split(' ');
-    for (let i = 0; i < words.length; i++) {
-      const word = i === 0 ? words[i] : ' ' + words[i];
-      res.write(`data: ${JSON.stringify({ content: word })}\n\n`);
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
+    console.log(`📝 Streamed response complete. Length: ${fullResponse.length}`);
 
     // Save the conversation to database if we have the necessary info
     if (userId && threadId && supabaseAdmin) {

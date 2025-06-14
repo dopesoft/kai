@@ -104,10 +104,12 @@ function getSupabase() {
       supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
     } else {
       console.warn("\u26A0\uFE0F Supabase not configured - memory features will be disabled");
-      console.warn("Add SUPABASE_URL and SUPABASE_ANON_KEY to server/.env file");
+      console.warn("Add SUPABASE_URL and SUPABASE_ANON_KEY to environment variables");
       console.warn("Current env:", {
         hasSupabaseUrl: !!process.env.SUPABASE_URL,
-        hasSupabaseKey: !!process.env.SUPABASE_ANON_KEY
+        hasSupabaseKey: !!process.env.SUPABASE_ANON_KEY,
+        supabaseUrlValue: process.env.SUPABASE_URL ? "Set" : "Not set",
+        supabaseKeyValue: process.env.SUPABASE_ANON_KEY ? "Set" : "Not set"
       });
       supabaseInstance = null;
     }
@@ -118,6 +120,12 @@ function getSupabaseAdmin() {
   if (supabaseAdminInstance === null) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    console.log("\u{1F527} Initializing Supabase admin client...", {
+      hasUrl: !!supabaseUrl,
+      hasServiceKey: !!supabaseServiceRoleKey,
+      urlValue: supabaseUrl ? "Set" : "Not set",
+      serviceKeyValue: supabaseServiceRoleKey ? "Set" : "Not set"
+    });
     if (supabaseUrl && supabaseServiceRoleKey) {
       console.log("\u2705 Supabase admin client configured successfully");
       supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -128,8 +136,11 @@ function getSupabaseAdmin() {
         }
       });
     } else {
-      console.warn("\u26A0\uFE0F Supabase admin client not configured - memory operations may fail due to RLS");
-      console.warn("Add SUPABASE_SERVICE_ROLE_KEY to server/.env file");
+      console.error("\u274C Supabase admin client not configured - THIS WILL CAUSE ERRORS");
+      console.error("Missing:", {
+        SUPABASE_URL: !supabaseUrl,
+        SUPABASE_SERVICE_ROLE_KEY: !supabaseServiceRoleKey
+      });
       supabaseAdminInstance = null;
     }
   }
@@ -150,12 +161,7 @@ var supabaseAdmin = new Proxy({}, {
     if (instance) {
       return instance[prop];
     }
-    console.warn("\u26A0\uFE0F Admin client not available, falling back to regular client");
-    const regularInstance = getSupabase();
-    if (regularInstance) {
-      return regularInstance[prop];
-    }
-    return void 0;
+    throw new Error(`Supabase admin client not initialized. Check environment variables: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY`);
   }
 });
 
@@ -197,60 +203,132 @@ async function fetchMemories(userId, threadId, userMessage, apiKey) {
 async function extractMemories(userMessage, assistantMessage, apiKey) {
   console.log("\u{1F9E0} Extracting memories from conversation...");
   const client = apiKey ? new OpenAI({ apiKey }) : openai;
-  const extractionPrompt = `Look at this conversation and identify anything worth remembering.
+  const extractionPrompt = `Analyze this conversation and extract memorable information using a structured categorization system.
 
 User: ${userMessage}
 Assistant: ${assistantMessage}
 
-Return a JSON object with:
-- "short_term": temporary context about THIS conversation with:
-  - display: natural language version of the context
-  - tags: relevant tags as array
-- "long_term": permanent facts about the user with:
-  - category: type of information (personal, dates, preferences, goals, context)
-  - key: snake_case identifier
-  - value: the actual value
-  - display: natural language version
-  - importance: 1-5
+## LONG-TERM MEMORY Categories:
 
-Example response:
+### Personal
+- **identity**: Full name, nicknames, pronouns, age, birthday
+- **location**: Current city, country, timezone, previous locations  
+- **background**: Birthplace, nationality, languages, cultural background
+- **physical**: Health conditions, disabilities, allergies, dietary restrictions
+- **personality**: Traits, MBTI type, values, communication style
+
+### Professional  
+- **career**: Current job title, company, industry, work schedule
+- **expertise**: Skills, certifications, education, specializations
+- **history**: Previous jobs, career transitions, major projects
+- **goals**: Career aspirations, desired role changes, skill development
+
+### Relationships
+- **family**: Spouse/partner, children, parents, siblings, extended family
+- **social**: Close friends, social circles, community involvement
+- **professional**: Colleagues, mentors, business partners, clients
+- **pets**: Pet names, types, care requirements
+
+### Preferences
+- **interests**: Hobbies, passions, entertainment preferences
+- **lifestyle**: Daily routines, habits, living situation
+- **technology**: Devices used, platforms preferred, tech comfort level
+- **communication**: Preferred contact methods, response style, formality
+- **learning**: Learning style, preferred formats, topics of interest
+
+### Events
+- **recurring**: Birthdays, anniversaries, regular appointments
+- **upcoming**: Planned events, deadlines, milestones
+- **historical**: Important past events, achievements, life changes
+
+### Context
+- **financial**: Budget ranges, financial goals, spending priorities
+- **constraints**: Time zones, availability, schedule constraints, limitations
+
+## SHORT-TERM MEMORY Categories:
+
+### Conversation
+- **current_topic**: What we're discussing right now
+- **recent_questions**: Questions asked in this session
+- **clarifications**: Specific details provided for current task
+- **working_memory**: Temporary data, calculations, draft content
+
+### Task Progress
+- **active_projects**: Multi-step tasks in progress
+- **decisions_made**: Choices confirmed in this conversation
+- **next_steps**: Agreed upon actions for near future
+
+### Emotional Context
+- **current_mood**: User's expressed emotional state
+- **concerns**: Worries or issues raised this session
+
+### Session Metadata
+- **preferences_stated**: Temporary preferences for this task
+- **tools_used**: APIs, integrations accessed this session
+
+Return JSON with this exact structure:
 {
   "short_term": [
     {
-      "display": "User is planning a birthday party for their wife",
-      "tags": ["birthday", "planning", "wife"]
+      "display": "Natural language description",
+      "tags": ["tag1", "tag2"]
     }
   ],
   "long_term": [
     {
-      "category": "personal",
-      "key": "wife_name", 
-      "value": "Ariana",
-      "display": "My wife's name is Ariana",
-      "importance": 5
-    },
-    {
-      "category": "dates",
-      "key": "wife_birthday",
-      "value": "September 12",
-      "display": "My wife Ariana's birthday is September 12th",
-      "importance": 5
+      "category": "personal|professional|relationships|preferences|events|context",
+      "key": "snake_case_identifier",
+      "value": "actual_value",
+      "display": "Natural language description",
+      "importance": 1-5
     }
   ]
 }
 
-Be smart about what matters. Generate natural, conversational display text.`;
+Examples:
+- "My name is Sarah" \u2192 LONG-TERM: category="personal", key="full_name", value="Sarah"
+- "I own a restaurant" \u2192 LONG-TERM: category="professional", key="business_type", value="restaurant"
+- "My wife's birthday is June 5th" \u2192 LONG-TERM: category="events", key="wife_birthday", value="June 5th"
+- "I'm asking about marketing" \u2192 SHORT-TERM: conversation context
+- "For this project, make it formal" \u2192 SHORT-TERM: session preferences
+
+Only extract clear, factual information. Be very selective.`;
   try {
-    const response = await client.chat.completions.create({
+    const response = await client.responses.create({
       model: "gpt-4",
-      messages: [{ role: "user", content: extractionPrompt }],
-      temperature: 0.7
+      input: [
+        { role: "system", content: "Extract memories from the conversation following the JSON format specified." },
+        { role: "user", content: extractionPrompt }
+      ],
+      temperature: 0.7,
+      max_output_tokens: 1e3
     });
-    const content = response.choices[0].message.content || '{"short_term":[],"long_term":[]}';
+    let content = '{"short_term":[],"long_term":[]}';
+    if (response.output && Array.isArray(response.output)) {
+      for (const output of response.output) {
+        if (output.role === "assistant" && output.content && output.content[0]?.text) {
+          content = output.content[0].text;
+          break;
+        }
+      }
+      if (content === '{"short_term":[],"long_term":[]}' && response.output[0]?.content?.[0]?.text) {
+        content = response.output[0].content[0].text;
+      }
+    }
     console.log("\u{1F4DD} Raw extraction response:", content);
-    const extracted = JSON.parse(content);
-    console.log("\u{1F4DD} Parsed memories:", extracted);
-    return extracted;
+    let cleanedContent = content;
+    if (content.includes("```json")) {
+      cleanedContent = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    }
+    try {
+      const extracted = JSON.parse(cleanedContent);
+      console.log("\u{1F4DD} Parsed memories:", extracted);
+      return extracted;
+    } catch (parseError) {
+      console.error("\u274C Failed to parse memory extraction response:", parseError);
+      console.error("Raw content was:", content);
+      return { short_term: [], long_term: [] };
+    }
   } catch (error) {
     console.error("\u274C Memory extraction error:", error);
     return { short_term: [], long_term: [] };
@@ -295,6 +373,42 @@ async function registerRoutes(app2) {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Cache-Control"
       });
+      console.log("\u{1F50D} Request data:", {
+        hasUserId: !!userId,
+        hasThreadId: !!threadId,
+        userId,
+        threadId,
+        messageLength: message?.length
+      });
+      if (userId && threadId) {
+        console.log("\u{1F4BE} Attempting to save user message to chat_messages...", {
+          thread_id: threadId,
+          user_id: userId,
+          role: "user",
+          content_length: message.length,
+          model: model || "o4-mini"
+        });
+        const { data, error } = await supabaseAdmin.from("chat_messages").insert({
+          thread_id: threadId,
+          role: "user",
+          content: message,
+          metadata: { model: model || "o4-mini", user_id: userId }
+        }).select();
+        if (error) {
+          console.error("\u274C Failed to save user message to chat_messages:", {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            thread_id: threadId,
+            user_id: userId
+          });
+        } else {
+          console.log("\u2705 User message saved to chat_messages:", data);
+        }
+      } else {
+        console.log("\u26A0\uFE0F Skipping user message save - missing userId or threadId:", { userId, threadId });
+      }
       await storage.createMessage({
         content: message,
         role: "user"
@@ -311,7 +425,6 @@ async function registerRoutes(app2) {
       const activeApiKey = apiKey || process.env.OPENAI_API_KEY;
       const activeModel = model || "o4-mini";
       let assistantMessage = "";
-      await new Promise((resolve) => setTimeout(resolve, 2e3 + Math.random() * 1e3));
       if (activeApiKey && activeApiKey !== "demo_key") {
         try {
           const userOpenai = new OpenAI({ apiKey: activeApiKey });
@@ -319,41 +432,39 @@ async function registerRoutes(app2) {
 
 Context from memory:
 ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
-          const response = await userOpenai.responses.create({
+          const isReasoningModel = /^(o[1-9]|gpt-4\.1)/i.test(activeModel);
+          console.log(`\u{1F50D} Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
+          const messages2 = [
+            { role: "system", content: systemContent },
+            { role: "user", content: message }
+          ];
+          const requestParams = {
             model: activeModel,
-            input: [
-              {
-                "role": "system",
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": systemContent
-                  }
-                ]
-              },
-              {
-                "role": "user",
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": message
-                  }
-                ]
+            input: messages2,
+            max_output_tokens: 1e3
+          };
+          if (!isReasoningModel) {
+            console.log(`\u2705 Adding temperature for non-reasoning model: ${activeModel}`);
+            requestParams.temperature = 0.7;
+            requestParams.top_p = 1;
+          } else {
+            console.log(`\u{1F6AB} Skipping temperature for reasoning model: ${activeModel}`);
+          }
+          const respAny = await userOpenai.responses.create(requestParams);
+          let responseText = "";
+          if (respAny.output && Array.isArray(respAny.output)) {
+            for (const output of respAny.output) {
+              if (output.role === "assistant" && output.content && output.content[0]?.text) {
+                responseText = output.content[0].text;
+                break;
               }
-            ],
-            text: {
-              "format": {
-                "type": "text"
-              }
-            },
-            reasoning: {},
-            tools: [],
-            temperature: 0.7,
-            max_output_tokens: 1e3,
-            top_p: 1,
-            store: true
-          });
-          const responseText = response.output_text || "";
+            }
+            if (!responseText && respAny.output[0]?.content?.[0]?.text) {
+              responseText = respAny.output[0].content[0].text;
+            }
+          }
+          let totalTokens = respAny.usage?.total_tokens || 0;
+          console.log(`\u{1F4DD} Extracted response length: ${responseText.length}, preview: ${responseText.substring(0, 100)}...`);
           assistantMessage = responseText;
           const words = responseText.split(" ");
           let currentText = "";
@@ -366,8 +477,45 @@ ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and
             await new Promise((resolve) => setTimeout(resolve, 50));
           }
           if (userId && threadId) {
+            console.log("\u{1F4BE} Attempting to save assistant message to chat_messages...", {
+              thread_id: threadId,
+              role: "assistant",
+              content_length: assistantMessage.length,
+              model: activeModel,
+              token_count: totalTokens
+            });
+            const { data, error } = await supabaseAdmin.from("chat_messages").insert({
+              thread_id: threadId,
+              role: "assistant",
+              content: assistantMessage,
+              metadata: {
+                model: activeModel,
+                token_count: totalTokens,
+                user_id: userId
+              }
+            }).select();
+            if (error) {
+              console.error("\u274C Failed to save assistant message to chat_messages:", {
+                error: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                thread_id: threadId,
+                user_id: userId
+              });
+            } else {
+              console.log("\u2705 Assistant message saved to chat_messages:", data);
+            }
+          }
+          if (userId && threadId) {
             console.log("\u{1F3AF} Attempting to extract and save memories...");
             const extractedMemories = await extractMemories(message, assistantMessage, apiKey);
+            console.log("\u{1F4CA} Extracted memories:", {
+              shortTermCount: extractedMemories.short_term?.length || 0,
+              longTermCount: extractedMemories.long_term?.length || 0,
+              shortTermMemories: extractedMemories.short_term,
+              longTermMemories: extractedMemories.long_term
+            });
             if (extractedMemories.short_term.length > 0) {
               console.log(`\u{1F4BE} Saving ${extractedMemories.short_term.length} short-term memories...`);
               for (const memory of extractedMemories.short_term) {
@@ -398,10 +546,22 @@ ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and
                   display_text: memory.display,
                   importance: memory.importance,
                   embedding,
-                  metadata: { auto_captured: true }
+                  metadata: {
+                    auto_captured: true,
+                    subcategory: memory.key.split("_")[0],
+                    // Extract subcategory from key
+                    extracted_from: "conversation"
+                  }
                 });
                 if (error) {
                   console.error("\u274C Long-term memory save error:", error);
+                } else {
+                  console.log("\u2705 Long-term memory saved:", {
+                    category: memory.category,
+                    key: memory.key,
+                    value: memory.value,
+                    importance: memory.importance
+                  });
                 }
               }
             }
@@ -453,6 +613,36 @@ ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and
     try {
       const { message, apiKey, model, userId, threadId } = req.body;
       const parsedData = chatRequestSchema.parse({ message, apiKey, model });
+      if (userId && threadId) {
+        console.log("\u{1F4BE} [NON-STREAMING] Attempting to save user message to chat_messages...", {
+          thread_id: threadId,
+          user_id: userId,
+          role: "user",
+          content_length: message.length,
+          model: model || "o4-mini"
+        });
+        const { data, error } = await supabaseAdmin.from("chat_messages").insert({
+          thread_id: threadId,
+          user_id: userId,
+          role: "user",
+          content: message,
+          metadata: { model: model || "o4-mini" }
+        }).select();
+        if (error) {
+          console.error("\u274C [NON-STREAMING] Failed to save user message to chat_messages:", {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            thread_id: threadId,
+            user_id: userId
+          });
+        } else {
+          console.log("\u2705 [NON-STREAMING] User message saved to chat_messages:", data);
+        }
+      } else {
+        console.log("\u26A0\uFE0F [NON-STREAMING] Skipping user message save - missing userId or threadId:", { userId, threadId });
+      }
       await storage.createMessage({
         content: message,
         role: "user"
@@ -467,52 +657,90 @@ ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and
       const activeModel = model || "o4-mini";
       if (activeApiKey && activeApiKey !== "demo_key") {
         try {
-          await new Promise((resolve) => setTimeout(resolve, 2e3 + Math.random() * 1e3));
           const userOpenai = new OpenAI({ apiKey: activeApiKey });
           const systemContent = memoryContext ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.
 
 Context from memory:
 ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
-          const response2 = await userOpenai.responses.create({
+          const isReasoningModel = /^(o[1-9]|gpt-4\.1)/i.test(activeModel);
+          console.log(`\u{1F50D} Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
+          const messages2 = [
+            { role: "system", content: systemContent },
+            { role: "user", content: message }
+          ];
+          const requestParams = {
             model: activeModel,
-            input: [
-              {
-                "role": "system",
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": systemContent
-                  }
-                ]
-              },
-              {
-                "role": "user",
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": message
-                  }
-                ]
+            input: messages2,
+            max_output_tokens: 1e3
+          };
+          if (!isReasoningModel) {
+            console.log(`\u2705 Adding temperature for non-reasoning model: ${activeModel}`);
+            requestParams.temperature = 0.7;
+            requestParams.top_p = 1;
+          } else {
+            console.log(`\u{1F6AB} Skipping temperature for reasoning model: ${activeModel}`);
+          }
+          const respAny = await userOpenai.responses.create(requestParams);
+          let responseText = "";
+          if (respAny.output && Array.isArray(respAny.output)) {
+            for (const output of respAny.output) {
+              if (output.role === "assistant" && output.content && output.content[0]?.text) {
+                responseText = output.content[0].text;
+                break;
               }
-            ],
-            text: {
-              "format": {
-                "type": "text"
+            }
+            if (!responseText && respAny.output[0]?.content?.[0]?.text) {
+              responseText = respAny.output[0].content[0].text;
+            }
+          }
+          let totalTokens = respAny.usage?.total_tokens || 0;
+          console.log(`\u{1F4DD} Extracted response length: ${responseText.length}, preview: ${responseText.substring(0, 100)}...`);
+          assistantMessage = responseText;
+          const words = responseText.split(" ");
+          let currentText = "";
+          for (let i = 0; i < words.length; i++) {
+            const wordToAdd = i === 0 ? words[i] : " " + words[i];
+            currentText += wordToAdd;
+            res.write(`data: ${JSON.stringify({ content: wordToAdd, done: false })}
+
+`);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          if (userId && threadId) {
+            console.log("\u{1F4BE} Attempting to save assistant message to chat_messages...", {
+              thread_id: threadId,
+              role: "assistant",
+              content_length: assistantMessage.length,
+              model: activeModel,
+              token_count: totalTokens
+            });
+            const { data, error } = await supabaseAdmin.from("chat_messages").insert({
+              thread_id: threadId,
+              role: "assistant",
+              content: assistantMessage,
+              metadata: {
+                model: activeModel,
+                token_count: totalTokens,
+                user_id: userId
               }
-            },
-            reasoning: {},
-            tools: [],
-            temperature: 0.7,
-            max_output_tokens: 1e3,
-            top_p: 1,
-            store: true
-          });
-          assistantMessage = response2.output_text || "I apologize, but I couldn't generate a response.";
+            }).select();
+            if (error) {
+              console.error("\u274C Failed to save assistant message to chat_messages:", {
+                error: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                thread_id: threadId,
+                user_id: userId
+              });
+            } else {
+              console.log("\u2705 Assistant message saved to chat_messages:", data);
+            }
+          }
           if (userId && threadId) {
             const extractedMemories = await extractMemories(message, assistantMessage, apiKey);
             for (const memory of extractedMemories.short_term) {
               await supabaseAdmin.from("short_term_memory").insert({
-                user_id: userId,
                 thread_id: threadId,
                 message: memory.display,
                 display_text: memory.display,
@@ -525,7 +753,6 @@ ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and
             for (const memory of extractedMemories.long_term) {
               const embedding = await generateEmbedding(memory.value, apiKey);
               await supabaseAdmin.from("long_term_memory").insert({
-                user_id: userId,
                 category: memory.category,
                 key: memory.key,
                 value: memory.value,
@@ -568,6 +795,109 @@ ${memoryContext}` : "You are a helpful AI assistant. Provide clear, concise, and
       res.status(500).json({ message: "Failed to fetch messages" });
     }
   });
+  if (process.env.NODE_ENV !== "production") {
+    app2.post("/api/chat/threads", async (req, res) => {
+      try {
+        const { user_id, thread_id, title } = req.body;
+        if (!user_id || !thread_id) {
+          return res.status(400).json({ error: "user_id and thread_id are required" });
+        }
+        if (!supabaseAdmin) {
+          console.error("\u274C Supabase admin client is not initialized");
+          return res.status(500).json({
+            error: "Database connection not configured",
+            details: "Supabase admin client not initialized"
+          });
+        }
+        const { data, error } = await supabaseAdmin.from("chat_threads").insert({
+          user_id,
+          thread_id,
+          title: title || "New Chat",
+          metadata: {}
+        }).select().single();
+        if (error) {
+          console.error("Error creating chat thread:", {
+            error,
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          });
+          return res.status(500).json({
+            error: "Failed to create thread",
+            code: error.code,
+            message: error.message
+          });
+        }
+        res.json(data);
+      } catch (error) {
+        console.error("Create thread endpoint error:", error);
+        res.status(500).json({
+          error: "Internal server error",
+          message: error instanceof Error ? error.message : "Unknown error"
+        });
+      }
+    });
+    app2.get("/api/chat/threads", async (req, res) => {
+      try {
+        const { user_id } = req.query;
+        if (!user_id) {
+          return res.status(400).json({ error: "user_id is required" });
+        }
+        const { data, error } = await supabaseAdmin.from("chat_threads").select("*").eq("user_id", user_id).eq("archived", false).order("updated_at", { ascending: false });
+        if (error) {
+          console.error("Error fetching threads:", error);
+          return res.status(500).json({ error: "Failed to fetch threads" });
+        }
+        res.json(data || []);
+      } catch (error) {
+        console.error("Fetch threads endpoint error:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+    app2.get("/api/chat/threads/:threadId", async (req, res) => {
+      try {
+        const { threadId } = req.params;
+        const { user_id } = req.query;
+        if (!user_id) {
+          return res.status(400).json({ error: "user_id is required" });
+        }
+        const { data: thread, error: threadError } = await supabaseAdmin.from("chat_threads").select("*").eq("thread_id", threadId).eq("user_id", user_id).single();
+        if (threadError || !thread) {
+          return res.status(404).json({ error: "Thread not found" });
+        }
+        const { data: messages2, error: messagesError } = await supabaseAdmin.from("chat_messages").select("*").eq("thread_id", threadId).order("created_at", { ascending: true });
+        if (messagesError) {
+          console.error("Error fetching messages:", messagesError);
+          return res.status(500).json({ error: "Failed to fetch messages" });
+        }
+        res.json({
+          ...thread,
+          messages: messages2 || []
+        });
+      } catch (error) {
+        console.error("Fetch thread endpoint error:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+    app2.delete("/api/chat/threads/:threadId", async (req, res) => {
+      try {
+        const { threadId } = req.params;
+        const { error } = await supabaseAdmin.from("chat_threads").update({
+          archived: true,
+          updated_at: (/* @__PURE__ */ new Date()).toISOString()
+        }).eq("thread_id", threadId);
+        if (error) {
+          console.error("Error archiving thread:", error);
+          return res.status(500).json({ error: "Failed to archive thread" });
+        }
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Delete thread endpoint error:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+  }
   app2.get("/api/memory/short-term", async (req, res) => {
     try {
       const { user_id } = req.query;
@@ -846,8 +1176,15 @@ async function setupVite(app2, server) {
     appType: "custom"
   });
   app2.use(vite.middlewares);
+  app2.use("/api/*", (req, res) => {
+    console.log(`API route not found: ${req.originalUrl}`);
+    res.status(404).json({ error: "API endpoint not found", path: req.originalUrl });
+  });
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+    if (url.startsWith("/api/")) {
+      return next();
+    }
     try {
       const clientTemplate = path2.resolve(
         import.meta.dirname,
@@ -867,6 +1204,9 @@ async function setupVite(app2, server) {
       next(e);
     }
   });
+  app2.use("/api/*", (req, res) => {
+    res.status(404).json({ error: "API endpoint not found" });
+  });
 }
 function serveStatic(app2) {
   const distPath = path2.resolve(import.meta.dirname, "public");
@@ -876,7 +1216,10 @@ function serveStatic(app2) {
     );
   }
   app2.use(express.static(distPath));
-  app2.use("*", (_req, res) => {
+  app2.use("*", (req, res) => {
+    if (req.originalUrl.startsWith("/api/")) {
+      return res.status(404).json({ error: "API endpoint not found" });
+    }
     res.sendFile(path2.resolve(distPath, "index.html"));
   });
 }
