@@ -86,15 +86,39 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
       messages.length > 0 &&
       messages[messages.length - 1].role === "assistant"
     ) {
-      // Small delay to ensure DOM is updated and timestamp is rendered
-      setTimeout(() => {
+      // Multiple timeouts to ensure scroll happens after all DOM updates
+      // Including memory notifications and timestamp rendering
+      const scrollToBottom = () => {
         container.scrollTo({
-          top: container.scrollHeight,
+          top: container.scrollHeight + 100, // Extra padding to ensure bottom is visible
           behavior: "smooth",
         });
-      }, 100);
+      };
+      
+      // Immediate scroll
+      scrollToBottom();
+      
+      // Scroll again after short delay (for DOM updates)
+      setTimeout(scrollToBottom, 200);
+      
+      // Final scroll after memory notifications might appear
+      setTimeout(scrollToBottom, 500);
     }
   }, [messages]);
+
+  // Also scroll when memory counts are updated
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container && memoryCounts && Object.keys(memoryCounts).length > 0) {
+      // Scroll after memory notification appears
+      setTimeout(() => {
+        container.scrollTo({
+          top: container.scrollHeight + 100,
+          behavior: "smooth",
+        });
+      }, 300);
+    }
+  }, [memoryCounts]);
 
   return (
     <main className="h-full relative z-10 overflow-hidden">

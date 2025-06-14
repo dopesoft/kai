@@ -26,6 +26,7 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
 
   // Preprocess content to fix bullet points and formatting
   const preprocessContent = (text: string): string => {
+    console.log('🔍 Preprocessing content:', text.substring(0, 200));
     // Convert bullet character (•) at start of lines to markdown list
     let processed = text.replace(/^• /gm, '- ');
     processed = processed.replace(/\n• /g, '\n- ');
@@ -38,12 +39,19 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
     
     // Bold section headers (text followed by colon at start of line or after newline)
     // Matches patterns like "Section Name:" or "Important Note:" at the beginning of lines
-    processed = processed.replace(/^([A-Za-z][A-Za-z\s]+):/gm, '**$1:**');
-    processed = processed.replace(/\n([A-Za-z][A-Za-z\s]+):/g, '\n**$1:**');
+    // Also handles numbered sections like "1. Section Name:"
+    processed = processed.replace(/^(\d+\.\s*)?([A-Za-z][A-Za-z0-9\s\-&]+):/gm, '$1**$2:**');
+    processed = processed.replace(/\n(\d+\.\s*)?([A-Za-z][A-Za-z0-9\s\-&]+):/g, '\n$1**$2:**');
+    
+    // Also bold standalone section headers that might be on their own line
+    // Like when AI writes "Photography Locations" on one line and details below
+    processed = processed.replace(/^([A-Z][A-Za-z0-9\s\-&]+)$/gm, '**$1**');
+    processed = processed.replace(/\n([A-Z][A-Za-z0-9\s\-&]+)$/gm, '\n**$1**');
     
     // Clean up extra newlines
     processed = processed.replace(/\n{3,}/g, '\n\n');
     
+    console.log('✅ Processed content:', processed.substring(0, 200));
     return processed.trim();
   };
 
