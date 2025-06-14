@@ -9,9 +9,10 @@ interface MessageContainerProps {
   streamingContent?: string;
   isStreaming?: boolean;
   memoryCounts?: { [messageId: number]: number };
+  onContainerRef?: (ref: HTMLDivElement | null) => void;
 }
 
-export function MessageContainer({ messages, isTyping, streamingContent, isStreaming, memoryCounts }: MessageContainerProps) {
+export function MessageContainer({ messages, isTyping, streamingContent, isStreaming, memoryCounts, onContainerRef }: MessageContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastUserRef = useRef<HTMLDivElement>(null);
   const prevMessagesLength = useRef<number>(messages.length);
@@ -76,7 +77,10 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
   return (
     <main className="h-full relative z-10 overflow-hidden">
       <div
-        ref={containerRef}
+        ref={(ref) => {
+          containerRef.current = ref;
+          if (onContainerRef) onContainerRef(ref);
+        }}
         className="h-full overflow-y-auto px-4 scroll-smooth text-[15px]"
         style={{ paddingTop: '16px', paddingBottom: '16px' }}
       >

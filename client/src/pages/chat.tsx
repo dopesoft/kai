@@ -37,6 +37,7 @@ export default function Chat() {
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [memoryCounts, setMemoryCounts] = useState<{ [messageId: number]: number }>({});
+  const [messageContainerRef, setMessageContainerRef] = useState<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -478,14 +479,14 @@ export default function Chat() {
                     
                     // Auto-scroll to ensure memory notification and action buttons are visible
                     setTimeout(() => {
-                      const container = document.querySelector('.h-full.overflow-y-auto');
-                      if (container) {
-                        container.scrollTo({
-                          top: container.scrollHeight,
+                      if (messageContainerRef) {
+                        console.log('🚀 Auto-scrolling to bottom for memory notification');
+                        messageContainerRef.scrollTo({
+                          top: messageContainerRef.scrollHeight,
                           behavior: 'smooth'
                         });
                       }
-                    }, 200); // Small delay to ensure DOM has updated
+                    }, 300); // Small delay to ensure DOM has updated with memory notification
                   }
                   
                   // End streaming mode after message is added
@@ -593,6 +594,7 @@ export default function Chat() {
                 streamingContent={streamingContent}
                 isStreaming={isStreaming}
                 memoryCounts={memoryCounts}
+                onContainerRef={setMessageContainerRef}
               />
             </div>
             <div className="flex-shrink-0 z-30" style={{ marginBottom: '80px', position: 'relative', top: '-4px' }}>
