@@ -59,34 +59,15 @@ export default function Chat() {
     enabled: !!effectiveUserId,
   });
 
-  // Track if we're creating a new thread/sending first message
-  const [isCreatingThread, setIsCreatingThread] = useState(false);
+  // Removed isCreatingThread - not needed with simpler logic
   
   // Fetch messages when thread changes
   useEffect(() => {
-    console.log('🔄 useEffect triggered - activeThreadId changed:', { 
-      activeThreadId, 
-      effectiveUserId, 
-      isCreatingThread,
-      currentMessagesLength: currentMessages.length 
-    });
-    
-    // Skip if we're creating a thread
-    if (isCreatingThread) {
-      console.log('⏸️ Skipping effect - thread creation in progress');
-      return;
-    }
-    
     if (activeThreadId && effectiveUserId) {
-      console.log('✅ Calling fetchThreadMessages for:', activeThreadId);
+      console.log('📥 Loading thread:', activeThreadId);
       fetchThreadMessages(activeThreadId);
-    } else if (!activeThreadId && currentMessages.length === 0) {
-      // Only clear if we don't have messages already
-      console.log('❌ No active thread and no messages - staying in welcome state');
-      setCurrentThread(null);
     }
-    // Don't clear messages if we have them
-  }, [activeThreadId, effectiveUserId, isCreatingThread]);
+  }, [activeThreadId, effectiveUserId]);
 
   const fetchThreadMessages = async (threadId: string) => {
     try {
@@ -220,12 +201,16 @@ export default function Chat() {
   });
 
   const handleNewChat = () => {
-    // Clear everything and show welcome screen
+    console.log('🆕 New chat requested');
+    // Clear everything for a fresh start
     setCurrentThread(null);
     setActiveThreadId(null);
     setCurrentMessages([]);
+    setIsTyping(false);
+    setIsStreaming(false);
+    setStreamingContent("");
     
-    // Clear active thread from localStorage (temporary state only)
+    // Clear active thread from localStorage
     localStorage.removeItem('activeThreadId');
   };
 
@@ -259,44 +244,20 @@ export default function Chat() {
     }
   };
 
-  // Restore active thread on mount (from localStorage)
+  // Simple thread restoration on mount
   useEffect(() => {
     const storedThreadId = localStorage.getItem('activeThreadId');
-    console.log('Restore thread effect:', { 
-      storedThreadId, 
-      effectiveUserId, 
-      threadsLength: threads.length,
-      hasMessages: currentMessages.length > 0,
-      isCreatingThread 
-    });
-
-    // If user just logged in (has real id), clear any anonymous id
-    if (user?.id) {
-      localStorage.removeItem('anon_user_id');
-    }
-
-    // Skip restoration if we already have messages OR we're creating a thread
-    if (currentMessages.length > 0 || isCreatingThread) {
-      console.log('Skipping thread restoration - messages present or creating thread');
-      return;
-    }
-
-    // Only try to restore if we have both user ID and threads loaded
-    if (effectiveUserId && threads.length > 0) {
-      if (storedThreadId) {
-        // Verify that the stored thread actually belongs to the current user
-        const existsForUser = threads.some((t: ChatThread) => t.thread_id === storedThreadId);
-        if (existsForUser) {
-          setActiveThreadId(storedThreadId);
-        } else {
-          // Remove stale reference
-          localStorage.removeItem('activeThreadId');
-          // Don't set to null - just leave it undefined
-        }
+    
+    if (storedThreadId && threads.length > 0 && !activeThreadId) {
+      const threadExists = threads.some((t: ChatThread) => t.thread_id === storedThreadId);
+      if (threadExists) {
+        console.log('📂 Restoring thread:', storedThreadId);
+        setActiveThreadId(storedThreadId);
+      } else {
+        localStorage.removeItem('activeThreadId');
       }
     }
-    // Don't actively clear anything - let the UI state persist
-  }, [effectiveUserId, threads.length, isCreatingThread]);
+  }, [threads]);
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
@@ -318,24 +279,24 @@ export default function Chat() {
       console.log('🤔 Setting typing indicator to true');
       setIsTyping(true);
 
-      // NOW do async operations
       // If no active thread, create a new one
       let threadToUse = currentThread;
       if (!threadToUse) {
-        setIsCreatingThread(true); // Prevent effect from clearing messages
-        
         // Generate title from first message
         const words = message.split(' ').slice(0, 4);
         const title = words.join(' ') + (message.split(' ').length > 4 ? '...' : '');
         
         // Create thread in database
-        threadToUse = await createThreadMutation.mutateAsync(title);
-        console.log('Created thread:', threadToUse); // Debug log
-        setCurrentThread(threadToUse);
-        setActiveThreadId(threadToUse!.thread_id);
-        localStorage.setItem('activeThreadId', threadToUse!.thread_id);
-        
-        setIsCreatingThread(false); // Re-enable effect
+        try {
+          threadToUse = await createThreadMutation.mutateAsync(title);
+          console.log('✅ Created thread:', threadToUse);
+          setCurrentThread(threadToUse);
+          setActiveThreadId(threadToUse.thread_id);
+          localStorage.setItem('activeThreadId', threadToUse.thread_id);
+        } catch (error) {
+          console.error('❌ Failed to create thread:', error);
+          // Still continue - we have the message in UI
+        }
       }
 
       // Get API key from database integrations
@@ -367,7 +328,7 @@ export default function Chat() {
         apiKey,
         model,
         userId: effectiveUserId || undefined,
-        threadId: threadToUse!.thread_id
+        threadId: threadToUse?.thread_id || 'temp-' + Date.now() // Fallback thread ID
       };
 
       // Use streaming endpoint
@@ -524,8 +485,8 @@ export default function Chat() {
     setIsSidebarOpen(false);
   };
 
-  // Show conversation view if we have messages OR an active thread with pending messages
-  const hasMessages = currentMessages.length > 0 || (activeThreadId && isCreatingThread);
+  // Simple rule: Show conversation view if we have any messages
+  const showChatView = currentMessages.length > 0;
 
   return (
     <div className="h-screen flex bg-white dark:bg-black relative overflow-hidden">
@@ -537,7 +498,7 @@ export default function Chat() {
       )}
 
       {/* Global background effects */}
-      {hasMessages ? <SparklesBackground /> : <BackgroundPathsEffect />}
+      {showChatView ? <SparklesBackground /> : <BackgroundPathsEffect />}
       
       <Sidebar 
         isOpen={isSidebarOpen} 
@@ -552,7 +513,7 @@ export default function Chat() {
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
         <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} onNewChat={handleNewChat} />
         
-        {hasMessages ? (
+        {showChatView ? (
           <div className={`flex-1 flex flex-col h-full ${!authEnabled ? 'pt-20' : 'pt-16'}`}>
             <div className="flex-1 overflow-hidden">
               <MessageContainer 
