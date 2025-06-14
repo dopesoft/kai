@@ -184,7 +184,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     const response = await (openai as any).responses.create(requestParams);
-    const fullResponse = response.output?.[0]?.content?.[0]?.text || '';
+    
+    // Debug: Log the full response structure
+    console.log('🔍 Full response structure:', JSON.stringify(response, null, 2));
+    
+    // Extract the assistant's response (not the reasoning part)
+    let fullResponse = '';
+    if (response.output && Array.isArray(response.output)) {
+      console.log(`📊 Output array has ${response.output.length} items`);
+      
+      // Look for the assistant's response in the output array
+      for (let i = 0; i < response.output.length; i++) {
+        const output = response.output[i];
+        console.log(`📋 Output ${i}:`, { role: output.role, hasContent: !!output.content, contentLength: output.content?.[0]?.text?.length });
+        
+        if (output.role === 'assistant' && output.content && output.content[0]?.text) {
+          fullResponse = output.content[0].text;
+          console.log(`✅ Found assistant response at index ${i}`);
+          break;
+        }
+      }
+      
+      // Fallback: if no assistant role found, try the first content item
+      if (!fullResponse && response.output[0]?.content?.[0]?.text) {
+        fullResponse = response.output[0].content[0].text;
+        console.log(`⚠️ Using fallback from index 0`);
+      }
+    }
+    
+    console.log(`📝 Extracted response length: ${fullResponse.length}, preview: ${fullResponse.substring(0, 100)}...`);
     
     // Stream the response word by word to simulate streaming
     const words = fullResponse.split(' ');

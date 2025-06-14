@@ -117,7 +117,23 @@ Be smart about what matters. Generate natural, conversational display text.`;
       max_output_tokens: 1000
     });
 
-    const content = response.output?.[0]?.content?.[0]?.text || '{"short_term":[],"long_term":[]}';
+    // Extract the assistant's response (not the reasoning part)
+    let content = '{"short_term":[],"long_term":[]}';
+    if (response.output && Array.isArray(response.output)) {
+      // Look for the assistant's response in the output array
+      for (const output of response.output) {
+        if (output.role === 'assistant' && output.content && output.content[0]?.text) {
+          content = output.content[0].text;
+          break;
+        }
+      }
+      
+      // Fallback: if no assistant role found, try the first content item
+      if (content === '{"short_term":[],"long_term":[]}' && response.output[0]?.content?.[0]?.text) {
+        content = response.output[0].content[0].text;
+      }
+    }
+    
     console.log('📝 Raw extraction response:', content);
     
     const extracted = JSON.parse(content);
@@ -267,8 +283,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           const respAny = await (userOpenai as any).responses.create(requestParams);
-          let responseText = (respAny.output?.[0]?.content?.[0]?.text as string) || "";
+          
+          // Extract the assistant's response (not the reasoning part)
+          let responseText = '';
+          if (respAny.output && Array.isArray(respAny.output)) {
+            // Look for the assistant's response in the output array
+            for (const output of respAny.output) {
+              if (output.role === 'assistant' && output.content && output.content[0]?.text) {
+                responseText = output.content[0].text;
+                break;
+              }
+            }
+            
+            // Fallback: if no assistant role found, try the first content item
+            if (!responseText && respAny.output[0]?.content?.[0]?.text) {
+              responseText = respAny.output[0].content[0].text;
+            }
+          }
+          
           let totalTokens = respAny.usage?.total_tokens || 0;
+          console.log(`📝 Extracted response length: ${responseText.length}, preview: ${responseText.substring(0, 100)}...`);
 
           assistantMessage = responseText;
 
@@ -495,8 +529,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           const respAny = await (userOpenai as any).responses.create(requestParams);
-          let responseText = (respAny.output?.[0]?.content?.[0]?.text as string) || "";
+          
+          // Extract the assistant's response (not the reasoning part)
+          let responseText = '';
+          if (respAny.output && Array.isArray(respAny.output)) {
+            // Look for the assistant's response in the output array
+            for (const output of respAny.output) {
+              if (output.role === 'assistant' && output.content && output.content[0]?.text) {
+                responseText = output.content[0].text;
+                break;
+              }
+            }
+            
+            // Fallback: if no assistant role found, try the first content item
+            if (!responseText && respAny.output[0]?.content?.[0]?.text) {
+              responseText = respAny.output[0].content[0].text;
+            }
+          }
+          
           let totalTokens = respAny.usage?.total_tokens || 0;
+          console.log(`📝 Extracted response length: ${responseText.length}, preview: ${responseText.substring(0, 100)}...`);
 
           assistantMessage = responseText;
 
