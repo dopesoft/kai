@@ -128,6 +128,14 @@ export default function Chat() {
       
       console.log('✅ Setting messages:', { count: mappedMessages.length });
       setCurrentMessages(mappedMessages);
+      
+      // Scroll to bottom after messages load
+      setTimeout(() => {
+        if (messageContainerRef) {
+          messageContainerRef.scrollTop = messageContainerRef.scrollHeight;
+          console.log('📍 Scrolled to bottom after loading thread');
+        }
+      }, 100);
     } catch (error) {
       console.error('❌ Failed to fetch thread messages:', error);
       

@@ -74,6 +74,14 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
     }
   }, [isStreaming, streamingContent]);
 
+  // Force scroll to absolute bottom
+  const forceScrollToBottom = () => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  };
+
   // Auto-scroll to bottom when AI message is complete (to show timestamp)
   useEffect(() => {
     const container = containerRef.current;
@@ -86,23 +94,14 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
       messages.length > 0 &&
       messages[messages.length - 1].role === "assistant"
     ) {
-      // Multiple timeouts to ensure scroll happens after all DOM updates
-      // Including memory notifications and timestamp rendering
-      const scrollToBottom = () => {
-        container.scrollTo({
-          top: container.scrollHeight + 100, // Extra padding to ensure bottom is visible
-          behavior: "smooth",
-        });
-      };
+      // Force immediate scroll
+      forceScrollToBottom();
       
-      // Immediate scroll
-      scrollToBottom();
-      
-      // Scroll again after short delay (for DOM updates)
-      setTimeout(scrollToBottom, 200);
-      
-      // Final scroll after memory notifications might appear
-      setTimeout(scrollToBottom, 500);
+      // Multiple retries to ensure it sticks
+      setTimeout(forceScrollToBottom, 100);
+      setTimeout(forceScrollToBottom, 300);
+      setTimeout(forceScrollToBottom, 600);
+      setTimeout(forceScrollToBottom, 1000);
     }
   }, [messages]);
 
@@ -110,13 +109,9 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
   useEffect(() => {
     const container = containerRef.current;
     if (container && memoryCounts && Object.keys(memoryCounts).length > 0) {
-      // Scroll after memory notification appears
-      setTimeout(() => {
-        container.scrollTo({
-          top: container.scrollHeight + 100,
-          behavior: "smooth",
-        });
-      }, 300);
+      // Force scroll after memory notification appears
+      setTimeout(forceScrollToBottom, 100);
+      setTimeout(forceScrollToBottom, 400);
     }
   }, [memoryCounts]);
 
@@ -128,7 +123,7 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
           if (onContainerRef) onContainerRef(ref);
         }}
         className="h-full overflow-y-auto px-4 scroll-smooth text-[15px]"
-        style={{ paddingTop: '16px', paddingBottom: '16px' }}
+        style={{ paddingTop: '16px', paddingBottom: '120px' }}
       >
         <div className="max-w-4xl mx-auto space-y-8">
           {messagePairs.map((pair, idx) => (
