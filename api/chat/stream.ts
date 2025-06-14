@@ -380,14 +380,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
       // Save assistant response
-      await supabaseAdmin
+      console.log('💾 Attempting to save assistant message to chat_messages...', {
+        thread_id: threadId,
+        role: 'assistant',
+        content_length: fullResponse.length,
+        model: activeModel,
+        user_id: userId
+      });
+      
+      const { data: assistantData, error: assistantError } = await supabaseAdmin
         .from('chat_messages')
         .insert({
           thread_id: threadId,
           role: 'assistant',
           content: fullResponse,
           metadata: { user_id: userId, model: activeModel }
+        })
+        .select();
+        
+      if (assistantError) {
+        console.error('❌ Failed to save assistant message to chat_messages:', {
+          error: assistantError.message,
+          code: assistantError.code,
+          details: assistantError.details,
+          hint: assistantError.hint
         });
+      } else {
+        console.log('✅ Assistant message saved to chat_messages:', assistantData);
+      }
 
       // Extract and save memories using AI analysis
       console.log('🎯 Attempting to extract and save memories...');

@@ -262,16 +262,22 @@ export default function Chat() {
   // Restore active thread on mount (from localStorage)
   useEffect(() => {
     const storedThreadId = localStorage.getItem('activeThreadId');
-    console.log('Restore thread effect:', { storedThreadId, effectiveUserId, threadsLength: threads.length });
+    console.log('Restore thread effect:', { 
+      storedThreadId, 
+      effectiveUserId, 
+      threadsLength: threads.length,
+      hasMessages: currentMessages.length > 0,
+      isCreatingThread 
+    });
 
     // If user just logged in (has real id), clear any anonymous id
     if (user?.id) {
       localStorage.removeItem('anon_user_id');
     }
 
-    // Skip restoration if we already have messages (user just sent a message)
-    if (currentMessages.length > 0) {
-      console.log('Skipping thread restoration - messages already present');
+    // Skip restoration if we already have messages OR we're creating a thread
+    if (currentMessages.length > 0 || isCreatingThread) {
+      console.log('Skipping thread restoration - messages present or creating thread');
       return;
     }
 
@@ -283,20 +289,14 @@ export default function Chat() {
         if (existsForUser) {
           setActiveThreadId(storedThreadId);
         } else {
-          // Remove stale reference so no random selection occurs
+          // Remove stale reference
           localStorage.removeItem('activeThreadId');
-          setActiveThreadId(null);
+          // Don't set to null - just leave it undefined
         }
-      } else {
-        setActiveThreadId(null);
       }
-    } else if (effectiveUserId && threads.length === 0) {
-      // User has no threads, ensure we're in welcome state
-      localStorage.removeItem('activeThreadId');
-      setActiveThreadId(null);
     }
-    // Don't do anything if we're still loading threads or waiting for user ID
-  }, [effectiveUserId, threads.length]);
+    // Don't actively clear anything - let the UI state persist
+  }, [effectiveUserId, threads.length, isCreatingThread]);
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
@@ -389,6 +389,12 @@ export default function Chat() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ Response not OK:', response.status, errorText);
+        
+        // Keep the thread active even on error
+        if (threadToUse?.thread_id) {
+          setActiveThreadId(threadToUse.thread_id);
+        }
+        
         throw new Error(`Failed to send message: ${response.status} ${errorText}`);
       }
 
@@ -518,7 +524,8 @@ export default function Chat() {
     setIsSidebarOpen(false);
   };
 
-  const hasMessages = currentMessages.length > 0;
+  // Show conversation view if we have messages OR an active thread with pending messages
+  const hasMessages = currentMessages.length > 0 || (activeThreadId && isCreatingThread);
 
   return (
     <div className="h-screen flex bg-white dark:bg-black relative overflow-hidden">
