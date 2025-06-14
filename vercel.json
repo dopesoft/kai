@@ -17,6 +17,12 @@
     },
     "api/integrations.ts": {
       "maxDuration": 30
+    },
+    "api/memory/short-term.ts": {
+      "maxDuration": 30
+    },
+    "api/memory/long-term.ts": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

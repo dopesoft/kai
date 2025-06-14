@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Header } from "@/components/chat/Header";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -72,9 +73,43 @@ export default function MemoryPage() {
   const [editingMemory, setEditingMemory] = useState<ShortTermMemory | LongTermMemory | null>(null);
   const [editingIsLongTerm, setEditingIsLongTerm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
 
-  // For now, use empty threads array since API endpoints don't exist yet
-  const threads: ChatThread[] = [];
+  // Determine the effective user identifier (real auth user or anonymous fallback)
+  const getEffectiveUserId = () => {
+    const anon = localStorage.getItem('anon_user_id');
+    const userId = user?.id || anon || null;
+    return userId;
+  };
+
+  const effectiveUserId = getEffectiveUserId();
+
+  // Fetch threads from database - same as chat page
+  const { data: threads = [], refetch: refetchThreads } = useQuery({
+    queryKey: ['threads', effectiveUserId],
+    queryFn: async () => {
+      if (!effectiveUserId) return [];
+      const response = await fetch(`/api/chat/threads?user_id=${effectiveUserId}`);
+      if (!response.ok) throw new Error('Failed to fetch threads');
+      return response.json();
+    },
+    enabled: !!effectiveUserId,
+  });
+
+  // Delete thread mutation
+  const deleteThreadMutation = useMutation({
+    mutationFn: async (threadId: string) => {
+      const response = await fetch(`/api/chat/threads/${threadId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) throw new Error('Failed to delete thread');
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchThreads();
+    }
+  });
 
   // Sidebar toggle
   const toggleSidebar = () => setIsSidebarOpen((v) => !v);
@@ -90,6 +125,29 @@ export default function MemoryPage() {
     setLocation('/'); // Navigate to chat page with new thread
   };
 
+  const handleThreadDelete = async (threadId: string) => {
+    try {
+      await deleteThreadMutation.mutateAsync(threadId);
+      
+      if (threadId === activeThreadId) {
+        // If we deleted the active thread, clear it
+        localStorage.removeItem('activeThreadId');
+        setActiveThreadIdState(null);
+      }
+      
+      toast({
+        title: "Success",
+        description: "Conversation deleted",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete conversation",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Fetch memories from API
   const fetchMemories = async () => {
     if (!user?.id) return;
@@ -101,6 +159,25 @@ export default function MemoryPage() {
         fetch(`/api/memory/long-term?user_id=${user.id}`)
       ]);
       
+      // Check if responses are ok before parsing JSON
+      if (!shortTermResponse.ok) {
+        const contentType = shortTermResponse.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          console.error('Received HTML instead of JSON for short-term memories');
+          throw new Error('API returned HTML instead of JSON');
+        }
+        throw new Error(`Short-term memory API error: ${shortTermResponse.status}`);
+      }
+      
+      if (!longTermResponse.ok) {
+        const contentType = longTermResponse.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          console.error('Received HTML instead of JSON for long-term memories');
+          throw new Error('API returned HTML instead of JSON');
+        }
+        throw new Error(`Long-term memory API error: ${longTermResponse.status}`);
+      }
+      
       const shortTermData = await shortTermResponse.json();
       const longTermData = await longTermResponse.json();
       
@@ -108,7 +185,11 @@ export default function MemoryPage() {
       setLongTermMemories(longTermData);
     } catch (error) {
       console.error('Error fetching memories:', error);
-      toast({ title: "Error", description: "Failed to load memories" });
+      toast({ 
+        title: "Error", 
+        description: error instanceof Error ? error.message : "Failed to load memories",
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }
@@ -174,8 +255,14 @@ export default function MemoryPage() {
         toast({ title: "Success", description: "Memory added successfully" });
         closeAddModal();
       } else {
-        const error = await response.json();
-        throw new Error(error.details || 'Failed to add memory');
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const error = await response.json();
+          throw new Error(error.details || error.error || 'Failed to add memory');
+        } else {
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
       }
     } catch (error) {
       console.error('Error adding memory:', error);
@@ -403,6 +490,7 @@ export default function MemoryPage() {
           onThreadSelect={handleThreadSelect}
           onNewChat={handleNewChat}
           activeThreadId={activeThreadId}
+          onThreadDelete={handleThreadDelete}
           threads={threads}
         />
         {/* Main content, centered horizontally */}

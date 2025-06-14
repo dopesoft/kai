@@ -19,6 +19,7 @@ import { Header } from "@/components/chat/Header";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { useAuth } from "@/lib/use-auth";
 import { integrationService, type Integration } from "@/lib/integrations";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // Integration interface is now imported from integrations service
 
@@ -27,11 +28,47 @@ export default function Settings() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const { user, profile, signOut, updateProfile, refreshProfile, loading, authEnabled, session } = useAuth();
+  const queryClient = useQueryClient();
   
   const [activeTab, setActiveTab] = useState("profile");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeThreadId] = useState<string | null>(null);
-  const threads: any[] = [];
+  const [activeThreadId, setActiveThreadIdState] = useState<string | null>(null);
+  
+  // Determine the effective user identifier (real auth user or anonymous fallback)
+  const getEffectiveUserId = () => {
+    const anon = localStorage.getItem('anon_user_id');
+    const userId = user?.id || anon || null;
+    return userId;
+  };
+
+  const effectiveUserId = getEffectiveUserId();
+
+  // Fetch threads from database - same as chat page
+  const { data: threads = [], refetch: refetchThreads } = useQuery({
+    queryKey: ['threads', effectiveUserId],
+    queryFn: async () => {
+      if (!effectiveUserId) return [];
+      const response = await fetch(`/api/chat/threads?user_id=${effectiveUserId}`);
+      if (!response.ok) throw new Error('Failed to fetch threads');
+      return response.json();
+    },
+    enabled: !!effectiveUserId,
+  });
+
+  // Delete thread mutation
+  const deleteThreadMutation = useMutation({
+    mutationFn: async (threadId: string) => {
+      const response = await fetch(`/api/chat/threads/${threadId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) throw new Error('Failed to delete thread');
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchThreads();
+    }
+  });
   
   // Original profile form data - keeping the existing fields
   const [firstName, setFirstName] = useState("");
@@ -630,6 +667,37 @@ export default function Settings() {
     setLocation('/'); // Navigate to chat page with new thread
   };
 
+  const handleThreadDelete = async (threadId: string) => {
+    try {
+      await deleteThreadMutation.mutateAsync(threadId);
+      
+      if (threadId === activeThreadId) {
+        // If we deleted the active thread, clear it
+        localStorage.removeItem('activeThreadId');
+        setActiveThreadIdState(null);
+      }
+      
+      toast({
+        title: "Success",
+        description: "Conversation deleted",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete conversation",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Get active thread ID from localStorage on mount
+  useEffect(() => {
+    const storedThreadId = localStorage.getItem('activeThreadId');
+    if (storedThreadId) {
+      setActiveThreadIdState(storedThreadId);
+    }
+  }, []);
+
   return (
     <div className="h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100 relative overflow-hidden flex flex-col">
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -651,6 +719,7 @@ export default function Settings() {
           onThreadSelect={handleThreadSelect}
           onNewChat={handleNewChat}
           activeThreadId={activeThreadId}
+          onThreadDelete={handleThreadDelete}
           threads={threads}
         />
         {/* Main content, centered horizontally */}
