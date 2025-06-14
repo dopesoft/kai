@@ -223,6 +223,14 @@ export default function Chat() {
 
   const handleThreadSelect = (threadId: string) => {
     console.log('🎯 handleThreadSelect called:', { threadId, effectiveUserId, currentActiveThread: activeThreadId });
+    
+    // Clear force new thread flag since we're selecting an existing thread
+    localStorage.removeItem('forceNewThread');
+    
+    // Clear current messages first so we don't show old messages during loading
+    setCurrentMessages([]);
+    setCurrentThread(null);
+    
     setActiveThreadId(threadId);
     // Store in localStorage for page refresh persistence
     localStorage.setItem('activeThreadId', threadId);
@@ -304,13 +312,16 @@ export default function Chat() {
         try {
           threadToUse = await createThreadMutation.mutateAsync(title);
           console.log('✅ Created NEW thread:', threadToUse);
-          setCurrentThread(threadToUse);
-          setActiveThreadId(threadToUse.thread_id);
-          localStorage.setItem('activeThreadId', threadToUse.thread_id);
+          if (threadToUse) {
+            setCurrentThread(threadToUse);
+            setActiveThreadId(threadToUse.thread_id);
+            localStorage.setItem('activeThreadId', threadToUse.thread_id);
+          }
         } catch (error) {
           console.error('❌ Failed to create thread:', error);
           // Create a temporary thread so UI works
-          const tempThread = {
+          const tempThread: ChatThread = {
+            id: 'temp-' + Date.now(),
             thread_id: 'temp-' + Date.now(),
             title: title,
             user_id: effectiveUserId || 'anon',
@@ -530,8 +541,8 @@ export default function Chat() {
     setIsSidebarOpen(false);
   };
 
-  // Simple rule: Show conversation view if we have any messages
-  const showChatView = currentMessages.length > 0;
+  // Simple rule: Show conversation view if we have any messages OR if we've selected a thread
+  const showChatView = currentMessages.length > 0 || activeThreadId !== null;
 
   return (
     <div className="h-screen flex bg-white dark:bg-black relative overflow-hidden">

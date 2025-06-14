@@ -39,35 +39,42 @@ User: ${userMessage}
 Assistant: ${assistantMessage}
 
 ## CRITICAL RULES:
-1. LONG-TERM MEMORY = PERMANENT, UNCHANGING facts about the person that will remain true in future conversations
-2. SHORT-TERM MEMORY = TEMPORARY, session-specific context that is only relevant to this conversation thread
-3. When in doubt, DO NOT save as long-term memory - be extremely selective
+1. LONG-TERM MEMORY = Important facts about the person that will be useful in future conversations (doesn't need to be permanent forever)
+2. SHORT-TERM MEMORY = Temporary, session-specific context that is only relevant to this conversation thread
+3. Focus on capturing meaningful personal information, professional details, and important life context
 
-## LONG-TERM MEMORY Categories (PERMANENT FACTS ONLY):
+## LONG-TERM MEMORY Categories:
 
-### Personal (Only save if explicitly stated as fact)
+### Personal
 - **identity**: Full name, nicknames, pronouns, age, birthday
-- **location**: Current city, country, timezone (only if stated as where they live)
-- **background**: Birthplace, nationality, languages, cultural background
+- **location**: Current city, country, timezone, where they live or work
+- **background**: Birthplace, nationality, languages, cultural background, education
 - **physical**: Health conditions, disabilities, allergies, dietary restrictions
-- **personality**: Deep traits, values (not temporary moods)
+- **personality**: Traits, values, communication preferences
 
-### Professional (Only current/established facts)
-- **career**: Current job title, company, industry (only if clearly stated)
-- **expertise**: Established skills, certifications, education
-- **history**: Past jobs (only if mentioned as fact, not speculation)
+### Professional
+- **career**: Current job title, company, industry, role, responsibilities
+- **expertise**: Skills, certifications, education, specializations, experience level
+- **history**: Past jobs, career changes, major projects, achievements, awards
+- **goals**: Career aspirations, professional development, business interests
 
-### Relationships (Only established relationships)
-- **family**: Spouse/partner, children, parents, siblings (with names if provided)
-- **pets**: Pet names, types (only if they own them)
+### Relationships
+- **family**: Spouse/partner, children, parents, siblings, extended family (with names/details)
+- **social**: Close friends, important relationships, social context
+- **professional**: Colleagues, mentors, business partners, clients (if mentioned)
+- **pets**: Pet names, types, care details
 
-### Preferences (Only strong, established preferences)
-- **interests**: Hobbies, passions (only if stated as ongoing interests)
-- **lifestyle**: Established routines, living situation
+### Preferences & Interests
+- **interests**: Hobbies, passions, entertainment, sports, activities
+- **lifestyle**: Living situation, routines, habits, travel, lifestyle choices
+- **technology**: Devices, platforms, tools they use, tech comfort level
+- **learning**: Areas of interest, learning goals, educational pursuits
 
-### Events (Only definite dates/facts)
-- **recurring**: Birthdays, anniversaries (with specific dates)
-- **upcoming**: Confirmed events with dates
+### Events & Context
+- **recurring**: Birthdays, anniversaries, regular commitments
+- **upcoming**: Important events, deadlines, planned activities
+- **historical**: Past achievements, significant life events, milestones
+- **constraints**: Time zones, availability, financial context, limitations
 
 ## SHORT-TERM MEMORY Categories (TEMPORARY CONTEXT):
 
@@ -84,15 +91,21 @@ Assistant: ${assistantMessage}
 - Session-specific preferences
 - Tools or methods they want to try
 
-## STRICT EXAMPLES:
-❌ "I'm trying to find ways to be more organized" → This is SHORT-TERM (current goal, not permanent fact)
-❌ "I work in tech" → Too vague for long-term
+## EXAMPLES:
 ✅ "My name is John" → LONG-TERM: personal/identity
+✅ "I'm 35 years old" → LONG-TERM: personal/identity  
 ✅ "I work at Google as a software engineer" → LONG-TERM: professional/career
+✅ "I live in San Francisco" → LONG-TERM: personal/location
 ✅ "My wife's name is Sarah" → LONG-TERM: relationships/family
 ✅ "My wife is a doctor" → LONG-TERM: relationships/family
-❌ "I want to learn Python" → SHORT-TERM (current interest, not established skill)
+✅ "I have a Masters in Computer Science" → LONG-TERM: professional/expertise
+✅ "I won the Employee of the Year award in 2023" → LONG-TERM: professional/history
+✅ "I love playing guitar" → LONG-TERM: preferences/interests
+✅ "I have two cats named Milo and Luna" → LONG-TERM: relationships/pets
+❌ "I'm trying to find ways to be more organized" → SHORT-TERM (current goal/task)
 ❌ "I'm feeling stressed today" → SHORT-TERM (temporary emotional state)
+❌ "For this project, I want a formal tone" → SHORT-TERM (session preference)
+❌ "I'm currently working on a presentation" → SHORT-TERM (active task)
 
 Return JSON with this exact structure:
 {
@@ -113,7 +126,7 @@ Return JSON with this exact structure:
   ]
 }
 
-BE EXTREMELY SELECTIVE. Most conversations should result in more short-term than long-term memories. Only save long-term if it's a definite, permanent fact about the person.`;
+Capture meaningful facts about the person that would be useful to remember in future conversations.`;
 
   try {
     const response = await openai.chat.completions.create({
