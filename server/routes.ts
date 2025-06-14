@@ -222,7 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const isReasoningModel = /^(o\d|o\d-mini|gpt-4o)/i.test(activeModel);
+          const isReasoningModel = /^(o|gpt-4o)/i.test(activeModel);
 
           const requestParams: any = {
             model: activeModel,
@@ -403,7 +403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const isReasoningModel = /^(o\d|o\d-mini|gpt-4o)/i.test(activeModel);
+          const isReasoningModel = /^(o|gpt-4o)/i.test(activeModel);
 
           const requestParams: any = {
             model: activeModel,
