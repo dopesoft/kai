@@ -177,7 +177,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'Access-Control-Allow-Headers': 'Cache-Control'
       });
 
-      // Store user message
+      // Save user message to database if userId provided
+      if (userId && threadId) {
+        await supabaseAdmin.from('chat_messages').insert({
+          thread_id: threadId,
+          user_id: userId,
+          role: 'user',
+          content: message,
+          metadata: { model: model || 'o4-mini' }
+        });
+      }
+
+      // Store user message in local storage (for backward compatibility)
       await storage.createMessage({
         content: message,
         role: "user"
@@ -240,6 +251,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             currentText += wordToAdd;
             res.write(`data: ${JSON.stringify({ content: wordToAdd, done: false })}\n\n`);
             await new Promise(resolve => setTimeout(resolve, 50));
+          }
+
+          // Save assistant message to database
+          if (userId && threadId) {
+            await supabaseAdmin.from('chat_messages').insert({
+              thread_id: threadId,
+              user_id: userId,
+              role: 'assistant',
+              content: assistantMessage,
+              metadata: { 
+                model: activeModel,
+                token_count: response.usage?.total_tokens || 0
+              }
+            });
           }
 
           // Extract and save memories if userId/threadId provided
@@ -316,7 +341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Store assistant message
+      // Store assistant message in local storage
       await storage.createMessage({
         content: assistantMessage,
         role: "assistant"
@@ -337,6 +362,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { message, apiKey, model, userId, threadId } = req.body;
       const parsedData = chatRequestSchema.parse({ message, apiKey, model });
+
+      // Save user message to database if userId provided
+      if (userId && threadId) {
+        await supabaseAdmin.from('chat_messages').insert({
+          thread_id: threadId,
+          user_id: userId,
+          role: 'user',
+          content: message,
+          metadata: { model: model || 'o4-mini' }
+        });
+      }
 
       // Store user message
       await storage.createMessage({
@@ -385,6 +421,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           assistantMessage = response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response.";
+
+          // Save assistant message to database
+          if (userId && threadId) {
+            await supabaseAdmin.from('chat_messages').insert({
+              thread_id: threadId,
+              user_id: userId,
+              role: 'assistant',
+              content: assistantMessage,
+              metadata: { 
+                model: activeModel,
+                token_count: response.usage?.total_tokens || 0
+              }
+            });
+          }
 
           // Extract and save memories if userId/threadId provided
           if (userId && threadId) {
@@ -459,6 +509,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== NEW CHAT PERSISTENCE ENDPOINTS =====
+  
+  // Create a new chat thread
+  app.post("/api/chat/threads", async (req, res) => {
+    try {
+      const { user_id, thread_id, title } = req.body;
+      
+      if (!user_id || !thread_id) {
+        return res.status(400).json({ error: "user_id and thread_id are required" });
+      }
+      
+      const { data, error } = await supabaseAdmin
+        .from('chat_threads')
+        .insert({
+          user_id,
+          thread_id,
+          title: title || 'New Chat',
+          metadata: {}
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error creating chat thread:', error);
+        return res.status(500).json({ error: "Failed to create thread" });
+      }
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Create thread endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Get all threads for a user
+  app.get("/api/chat/threads", async (req, res) => {
+    try {
+      const { user_id } = req.query;
+      
+      if (!user_id) {
+        return res.status(400).json({ error: "user_id is required" });
+      }
+      
+      const { data, error } = await supabaseAdmin
+        .from('chat_threads')
+        .select('*')
+        .eq('user_id', user_id)
+        .eq('archived', false)
+        .order('updated_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching threads:', error);
+        return res.status(500).json({ error: "Failed to fetch threads" });
+      }
+      
+      res.json(data || []);
+    } catch (error) {
+      console.error("Fetch threads endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Get a specific thread with its messages
+  app.get("/api/chat/threads/:threadId", async (req, res) => {
+    try {
+      const { threadId } = req.params;
+      const { user_id } = req.query;
+      
+      if (!user_id) {
+        return res.status(400).json({ error: "user_id is required" });
+      }
+      
+      // Get thread details
+      const { data: thread, error: threadError } = await supabaseAdmin
+        .from('chat_threads')
+        .select('*')
+        .eq('thread_id', threadId)
+        .eq('user_id', user_id)
+        .single();
+      
+      if (threadError || !thread) {
+        return res.status(404).json({ error: "Thread not found" });
+      }
+      
+      // Get messages for the thread
+      const { data: messages, error: messagesError } = await supabaseAdmin
+        .from('chat_messages')
+        .select('*')
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: true });
+      
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError);
+        return res.status(500).json({ error: "Failed to fetch messages" });
+      }
+      
+      res.json({
+        ...thread,
+        messages: messages || []
+      });
+    } catch (error) {
+      console.error("Fetch thread endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Update thread title
+  app.put("/api/chat/threads/:threadId", async (req, res) => {
+    try {
+      const { threadId } = req.params;
+      const { title } = req.body;
+      
+      if (!title) {
+        return res.status(400).json({ error: "title is required" });
+      }
+      
+      const { data, error } = await supabaseAdmin
+        .from('chat_threads')
+        .update({ 
+          title,
+          updated_at: new Date().toISOString()
+        })
+        .eq('thread_id', threadId)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating thread:', error);
+        return res.status(500).json({ error: "Failed to update thread" });
+      }
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Update thread endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Delete thread (archive)
+  app.delete("/api/chat/threads/:threadId", async (req, res) => {
+    try {
+      const { threadId } = req.params;
+      
+      // Archive instead of hard delete
+      const { error } = await supabaseAdmin
+        .from('chat_threads')
+        .update({ 
+          archived: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('thread_id', threadId);
+      
+      if (error) {
+        console.error('Error archiving thread:', error);
+        return res.status(500).json({ error: "Failed to archive thread" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete thread endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Memory API endpoints - ALL UPDATED TO USE supabaseAdmin
   
   // Get short term memories for user
@@ -470,7 +684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "user_id is required" });
       }
       
-      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { data, error } = await supabaseAdmin
         .from('short_term_memory')
         .select('*')
         .eq('user_id', user_id)
@@ -503,7 +717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "user_id is required" });
       }
       
-      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { data, error } = await supabaseAdmin
         .from('long_term_memory')
         .select('*')
         .eq('user_id', user_id)
@@ -541,7 +755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: { auto_captured: false }
       };
       
-      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { data, error } = await supabaseAdmin
         .from('short_term_memory')
         .insert(newMemory)
         .select()
@@ -589,7 +803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: { auto_captured: false }
       };
       
-      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { data, error } = await supabaseAdmin
         .from('long_term_memory')
         .insert(newMemory)
         .select()
@@ -617,7 +831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "display_text is required" });
       }
       
-      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { data, error } = await supabaseAdmin
         .from('short_term_memory')
         .update({ 
           message: display_text,
@@ -649,7 +863,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "display_text is required" });
       }
       
-      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { data, error } = await supabaseAdmin
         .from('long_term_memory')
         .update({ 
           display_text,
@@ -676,7 +890,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
-      const { error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { error } = await supabaseAdmin
         .from('short_term_memory')
         .delete()
         .eq('id', id);
@@ -698,7 +912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
-      const { error } = await supabaseAdmin  // FIXED: Changed from supabase
+      const { error } = await supabaseAdmin
         .from('long_term_memory')
         .delete()
         .eq('id', id);
