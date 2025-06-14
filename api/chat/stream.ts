@@ -160,7 +160,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Use responses API for ALL models
     const activeModel = model || 'gpt-4';
-    const isReasoningModel = /^(o1)/i.test(activeModel);
+    const isReasoningModel = /^(o[1-9]|gpt-4\.1)/i.test(activeModel);
+    
+    console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
     
     const systemContent = messages.find(m => m.role === 'system')?.content || '';
     const userContent = messages.find(m => m.role === 'user')?.content || '';
@@ -174,8 +176,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Only add temperature and top_p for non-reasoning models
     if (!isReasoningModel) {
+      console.log(`✅ Adding temperature for non-reasoning model: ${activeModel}`);
       requestParams.temperature = 0.7;
       requestParams.top_p = 1;
+    } else {
+      console.log(`🚫 Skipping temperature for reasoning model: ${activeModel}`);
     }
     
     const response = await (openai as any).responses.create(requestParams);

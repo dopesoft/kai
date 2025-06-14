@@ -246,7 +246,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const isReasoningModel = /^(o1)/i.test(activeModel);
+          const isReasoningModel = /^(o[1-9]|gpt-4\.1)/i.test(activeModel);
+
+          console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
 
           const requestParams: any = {
             model: activeModel,
@@ -257,8 +259,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Only add temperature and top_p for non-reasoning models
           if (!isReasoningModel) {
+            console.log(`✅ Adding temperature for non-reasoning model: ${activeModel}`);
             requestParams.temperature = 0.7;
             requestParams.top_p = 1;
+          } else {
+            console.log(`🚫 Skipping temperature for reasoning model: ${activeModel}`);
           }
 
           const respAny = await (userOpenai as any).responses.create(requestParams);
@@ -469,7 +474,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const isReasoningModel = /^(o1)/i.test(activeModel);
+          const isReasoningModel = /^(o[1-9]|gpt-4\.1)/i.test(activeModel);
+
+          console.log(`🔍 Model: ${activeModel}, isReasoningModel: ${isReasoningModel}`);
 
           const requestParams: any = {
             model: activeModel,
@@ -480,8 +487,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Only add temperature and top_p for non-reasoning models
           if (!isReasoningModel) {
+            console.log(`✅ Adding temperature for non-reasoning model: ${activeModel}`);
             requestParams.temperature = 0.7;
             requestParams.top_p = 1;
+          } else {
+            console.log(`🚫 Skipping temperature for reasoning model: ${activeModel}`);
           }
 
           const respAny = await (userOpenai as any).responses.create(requestParams);
