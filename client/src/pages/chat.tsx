@@ -36,6 +36,7 @@ export default function Chat() {
   const [currentThread, setCurrentThread] = useState<ChatThread | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [memoryCounts, setMemoryCounts] = useState<{ [messageId: number]: number }>({});
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -210,9 +211,14 @@ export default function Chat() {
     setIsTyping(false);
     setIsStreaming(false);
     setStreamingContent("");
+    setMemoryCounts({});
     
     // Clear active thread from localStorage
     localStorage.removeItem('activeThreadId');
+    
+    // Force a new thread by setting a flag that the next message should create a new thread
+    localStorage.setItem('forceNewThread', 'true');
+    console.log('🆕 Marked for new thread creation on next message');
   };
 
   const handleThreadSelect = (threadId: string) => {
@@ -282,11 +288,14 @@ export default function Chat() {
       console.log('🤔 Setting typing indicator to true');
       setIsTyping(true);
 
-      // ALWAYS create a new thread when sending from welcome screen (no active thread)
+      // ALWAYS create a new thread when sending from welcome screen (no active thread) or when forced
       let threadToUse = currentThread;
+      const forceNewThread = localStorage.getItem('forceNewThread') === 'true';
       
-      // If we're on welcome screen (no messages), ALWAYS create new thread
-      if (currentMessages.length === 0 || !activeThreadId || !currentThread) {
+      // If we're on welcome screen (no messages), ALWAYS create new thread, or if explicitly requested
+      if (currentMessages.length === 0 || !activeThreadId || !currentThread || forceNewThread) {
+        // Clear the force flag
+        localStorage.removeItem('forceNewThread');
         // Generate title from first message
         const words = message.split(' ').slice(0, 4);
         const title = words.join(' ') + (message.split(' ').length > 4 ? '...' : '');
@@ -340,12 +349,17 @@ export default function Chat() {
         }
       }
       
+      // Ensure we have a valid thread ID
+      if (!threadToUse?.thread_id) {
+        throw new Error("Failed to create thread - no thread ID available");
+      }
+
       const requestData: ChatRequest = { 
         message,
         apiKey,
         model,
         userId: effectiveUserId || undefined,
-        threadId: threadToUse?.thread_id || 'temp-' + Date.now() // Fallback thread ID
+        threadId: threadToUse.thread_id
       };
 
       // Use streaming endpoint
@@ -400,16 +414,14 @@ export default function Chat() {
                 // Handle memory updates
                 if (data.type === 'memory_update') {
                   console.log('📝 Memory saved:', data.memories);
-                  // Show a toast notification for memory updates
+                  // Store memory count for display above action buttons
                   const shortTermCount = data.memories.short_term?.length || 0;
                   const longTermCount = data.memories.long_term?.length || 0;
                   const totalCount = shortTermCount + longTermCount;
                   
                   if (totalCount > 0) {
-                    toast({
-                      title: "Memory Updated",
-                      description: `Saved ${totalCount} memory item${totalCount > 1 ? 's' : ''}`,
-                    });
+                    // Store the memory count for the next assistant message that will be created
+                    localStorage.setItem('nextMemoryCount', totalCount.toString());
                   }
                 } else if (data.type === 'thread_info') {
                   // Server might send OpenAI thread ID if using assistants
@@ -439,6 +451,16 @@ export default function Chat() {
                   };
                   
                   setCurrentMessages(prev => [...prev, assistantMessage]);
+                  
+                  // Get memory count and store it for this message
+                  const memoryCount = localStorage.getItem('nextMemoryCount');
+                  if (memoryCount) {
+                    setMemoryCounts(prev => ({
+                      ...prev,
+                      [assistantMessage.id]: parseInt(memoryCount, 10)
+                    }));
+                    localStorage.removeItem('nextMemoryCount');
+                  }
                   
                   // End streaming mode after message is added
                   setTimeout(() => {
@@ -544,6 +566,7 @@ export default function Chat() {
                 isTyping={isTyping}
                 streamingContent={streamingContent}
                 isStreaming={isStreaming}
+                memoryCounts={memoryCounts}
               />
             </div>
             <div className="flex-shrink-0 z-30" style={{ marginBottom: '80px', position: 'relative', top: '-4px' }}>

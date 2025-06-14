@@ -8,9 +8,10 @@ interface MessageContainerProps {
   isTyping: boolean;
   streamingContent?: string;
   isStreaming?: boolean;
+  memoryCounts?: { [messageId: number]: number };
 }
 
-export function MessageContainer({ messages, isTyping, streamingContent, isStreaming }: MessageContainerProps) {
+export function MessageContainer({ messages, isTyping, streamingContent, isStreaming, memoryCounts }: MessageContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastUserRef = useRef<HTMLDivElement>(null);
   const prevMessagesLength = useRef<number>(messages.length);
@@ -93,6 +94,7 @@ export function MessageContainer({ messages, isTyping, streamingContent, isStrea
                   content={pair.assistant.content}
                   role={pair.assistant.role as "user" | "assistant"}
                   timestamp={pair.assistant.timestamp}
+                  memoryCount={memoryCounts?.[pair.assistant.id]}
                 />
               ) :
                 idx === messagePairs.length - 1 && (isStreaming || isTyping) ? (

@@ -33,81 +33,79 @@ async function extractMemories(userMessage: string, assistantMessage: string, ap
   
   const openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
   
-  const extractionPrompt = `Analyze this conversation and extract memorable information using a structured categorization system.
+  const extractionPrompt = `Analyze this conversation and extract memorable information using STRICT categorization criteria.
 
 User: ${userMessage}
 Assistant: ${assistantMessage}
 
-## LONG-TERM MEMORY Categories:
+## CRITICAL RULES:
+1. LONG-TERM MEMORY = PERMANENT, UNCHANGING facts about the person that will remain true in future conversations
+2. SHORT-TERM MEMORY = TEMPORARY, session-specific context that is only relevant to this conversation thread
+3. When in doubt, DO NOT save as long-term memory - be extremely selective
 
-### Personal
+## LONG-TERM MEMORY Categories (PERMANENT FACTS ONLY):
+
+### Personal (Only save if explicitly stated as fact)
 - **identity**: Full name, nicknames, pronouns, age, birthday
-- **location**: Current city, country, timezone, previous locations  
+- **location**: Current city, country, timezone (only if stated as where they live)
 - **background**: Birthplace, nationality, languages, cultural background
 - **physical**: Health conditions, disabilities, allergies, dietary restrictions
-- **personality**: Traits, MBTI type, values, communication style
+- **personality**: Deep traits, values (not temporary moods)
 
-### Professional  
-- **career**: Current job title, company, industry, work schedule
-- **expertise**: Skills, certifications, education, specializations
-- **history**: Previous jobs, career transitions, major projects
-- **goals**: Career aspirations, desired role changes, skill development
+### Professional (Only current/established facts)
+- **career**: Current job title, company, industry (only if clearly stated)
+- **expertise**: Established skills, certifications, education
+- **history**: Past jobs (only if mentioned as fact, not speculation)
 
-### Relationships
-- **family**: Spouse/partner, children, parents, siblings, extended family
-- **social**: Close friends, social circles, community involvement
-- **professional**: Colleagues, mentors, business partners, clients
-- **pets**: Pet names, types, care requirements
+### Relationships (Only established relationships)
+- **family**: Spouse/partner, children, parents, siblings (with names if provided)
+- **pets**: Pet names, types (only if they own them)
 
-### Preferences
-- **interests**: Hobbies, passions, entertainment preferences
-- **lifestyle**: Daily routines, habits, living situation
-- **technology**: Devices used, platforms preferred, tech comfort level
-- **communication**: Preferred contact methods, response style, formality
-- **learning**: Learning style, preferred formats, topics of interest
+### Preferences (Only strong, established preferences)
+- **interests**: Hobbies, passions (only if stated as ongoing interests)
+- **lifestyle**: Established routines, living situation
 
-### Events
-- **recurring**: Birthdays, anniversaries, regular appointments
-- **upcoming**: Planned events, deadlines, milestones
-- **historical**: Important past events, achievements, life changes
+### Events (Only definite dates/facts)
+- **recurring**: Birthdays, anniversaries (with specific dates)
+- **upcoming**: Confirmed events with dates
 
-### Context
-- **financial**: Budget ranges, financial goals, spending priorities
-- **constraints**: Time zones, availability, schedule constraints, limitations
+## SHORT-TERM MEMORY Categories (TEMPORARY CONTEXT):
 
-## SHORT-TERM MEMORY Categories:
+### Conversation Context
+- Current topic being discussed
+- Questions asked in this session
+- Temporary goals or concerns (like "trying to be more organized")
+- Current problems they're working on
+- This session's mood or feelings
 
-### Conversation
-- **current_topic**: What we're discussing right now
-- **recent_questions**: Questions asked in this session
-- **clarifications**: Specific details provided for current task
-- **working_memory**: Temporary data, calculations, draft content
+### Task Context
+- Current projects being discussed
+- Immediate next steps
+- Session-specific preferences
+- Tools or methods they want to try
 
-### Task Progress
-- **active_projects**: Multi-step tasks in progress
-- **decisions_made**: Choices confirmed in this conversation
-- **next_steps**: Agreed upon actions for near future
-
-### Emotional Context
-- **current_mood**: User's expressed emotional state
-- **concerns**: Worries or issues raised this session
-
-### Session Metadata
-- **preferences_stated**: Temporary preferences for this task
-- **tools_used**: APIs, integrations accessed this session
+## STRICT EXAMPLES:
+❌ "I'm trying to find ways to be more organized" → This is SHORT-TERM (current goal, not permanent fact)
+❌ "I work in tech" → Too vague for long-term
+✅ "My name is John" → LONG-TERM: personal/identity
+✅ "I work at Google as a software engineer" → LONG-TERM: professional/career
+✅ "My wife's name is Sarah" → LONG-TERM: relationships/family
+✅ "My wife is a doctor" → LONG-TERM: relationships/family
+❌ "I want to learn Python" → SHORT-TERM (current interest, not established skill)
+❌ "I'm feeling stressed today" → SHORT-TERM (temporary emotional state)
 
 Return JSON with this exact structure:
 {
   "short_term": [
     {
       "display": "Natural language description",
-      "tags": ["tag1", "tag2"]
+      "tags": ["conversation", "current_goal", "mood", etc.]
     }
   ],
   "long_term": [
     {
       "category": "personal|professional|relationships|preferences|events|context",
-      "key": "snake_case_identifier",
+      "key": "snake_case_identifier", 
       "value": "actual_value",
       "display": "Natural language description",
       "importance": 1-5
@@ -115,14 +113,7 @@ Return JSON with this exact structure:
   ]
 }
 
-Examples:
-- "My name is Sarah" → LONG-TERM: category="personal", key="full_name", value="Sarah"
-- "I own a restaurant" → LONG-TERM: category="professional", key="business_type", value="restaurant"
-- "My wife's birthday is June 5th" → LONG-TERM: category="events", key="wife_birthday", value="June 5th"
-- "I'm asking about marketing" → SHORT-TERM: conversation context
-- "For this project, make it formal" → SHORT-TERM: session preferences
-
-Only extract clear, factual information. Be very selective.`;
+BE EXTREMELY SELECTIVE. Most conversations should result in more short-term than long-term memories. Only save long-term if it's a definite, permanent fact about the person.`;
 
   try {
     const response = await openai.chat.completions.create({

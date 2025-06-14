@@ -4,16 +4,17 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useTheme } from "@/lib/theme";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ThumbsUp, ThumbsDown, RotateCcw, Share, MoreHorizontal } from "lucide-react";
+import { Copy, ThumbsUp, ThumbsDown, RotateCcw, Share, MoreHorizontal, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ChatMessageProps {
   content: string;
   role: "user" | "assistant";
   timestamp?: Date;
+  memoryCount?: number;
 }
 
-export function ChatMessage({ content, role, timestamp }: ChatMessageProps) {
+export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessageProps) {
   const { theme } = useTheme();
   const { toast } = useToast();
   const [isHovered, setIsHovered] = useState(false);
@@ -120,6 +121,16 @@ export function ChatMessage({ content, role, timestamp }: ChatMessageProps) {
             )}
           </div>
         </div>
+        
+        {/* Memory notification - only for assistant messages with memory count */}
+        {role === "assistant" && memoryCount && memoryCount > 0 && (
+          <div className="flex items-center gap-2 mt-3 mb-1">
+            <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+              {memoryCount} Memories made
+            </span>
+          </div>
+        )}
         
         {/* Action buttons on hover */}
         <div className={`flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${
