@@ -179,13 +179,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Save user message to database if userId provided
       if (userId && threadId) {
-        await supabaseAdmin.from('chat_messages').insert({
+        console.log('💾 Attempting to save user message to chat_messages...', {
           thread_id: threadId,
           user_id: userId,
           role: 'user',
-          content: message,
-          metadata: { model: model || 'o4-mini' }
+          content_length: message.length,
+          model: model || 'o4-mini'
         });
+        
+        const { data, error } = await supabaseAdmin.from('chat_messages').insert({
+          thread_id: threadId,
+          role: 'user',
+          content: message,
+          metadata: { model: model || 'o4-mini', user_id: userId }
+        }).select();
+        
+        if (error) {
+          console.error('❌ Failed to save user message to chat_messages:', {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            thread_id: threadId,
+            user_id: userId
+          });
+        } else {
+          console.log('✅ User message saved to chat_messages:', data);
+        }
+      } else {
+        console.log('⚠️ Skipping user message save - missing userId or threadId:', { userId, threadId });
       }
 
       // Store user message in local storage (for backward compatibility)
@@ -255,16 +277,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Save assistant message to database
           if (userId && threadId) {
-            await supabaseAdmin.from('chat_messages').insert({
+            console.log('💾 Attempting to save assistant message to chat_messages...', {
               thread_id: threadId,
-              user_id: userId,
+              role: 'assistant',
+              content_length: assistantMessage.length,
+              model: activeModel,
+              token_count: totalTokens
+            });
+            
+            const { data, error } = await supabaseAdmin.from('chat_messages').insert({
+              thread_id: threadId,
               role: 'assistant',
               content: assistantMessage,
               metadata: { 
                 model: activeModel,
-                token_count: totalTokens
+                token_count: totalTokens,
+                user_id: userId
               }
-            });
+            }).select();
+            
+            if (error) {
+              console.error('❌ Failed to save assistant message to chat_messages:', {
+                error: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                thread_id: threadId,
+                user_id: userId
+              });
+            } else {
+              console.log('✅ Assistant message saved to chat_messages:', data);
+            }
           }
 
           // Extract and save memories if userId/threadId provided
@@ -277,8 +320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`💾 Saving ${extractedMemories.short_term.length} short-term memories...`);
               for (const memory of extractedMemories.short_term) {
                 const { error } = await supabaseAdmin.from('short_term_memory').insert({
-                  user_id: userId,
-                  thread_id: threadId,
+                      thread_id: threadId,
                   message: memory.display,
                   display_text: memory.display,
                   sender: 'system',
@@ -299,8 +341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const embedding = await generateEmbedding(memory.value, apiKey);
                 
                 const { error } = await supabaseAdmin.from('long_term_memory').insert({
-                  user_id: userId,
-                  category: memory.category,
+                      category: memory.category,
                   key: memory.key,
                   value: memory.value,
                   display_text: memory.display,
@@ -365,13 +406,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Save user message to database if userId provided
       if (userId && threadId) {
-        await supabaseAdmin.from('chat_messages').insert({
+        console.log('💾 [NON-STREAMING] Attempting to save user message to chat_messages...', {
+          thread_id: threadId,
+          user_id: userId,
+          role: 'user',
+          content_length: message.length,
+          model: model || 'o4-mini'
+        });
+        
+        const { data, error } = await supabaseAdmin.from('chat_messages').insert({
           thread_id: threadId,
           user_id: userId,
           role: 'user',
           content: message,
           metadata: { model: model || 'o4-mini' }
-        });
+        }).select();
+        
+        if (error) {
+          console.error('❌ [NON-STREAMING] Failed to save user message to chat_messages:', {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            thread_id: threadId,
+            user_id: userId
+          });
+        } else {
+          console.log('✅ [NON-STREAMING] User message saved to chat_messages:', data);
+        }
+      } else {
+        console.log('⚠️ [NON-STREAMING] Skipping user message save - missing userId or threadId:', { userId, threadId });
       }
 
       // Store user message
@@ -436,16 +500,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Save assistant message to database
           if (userId && threadId) {
-            await supabaseAdmin.from('chat_messages').insert({
+            console.log('💾 Attempting to save assistant message to chat_messages...', {
               thread_id: threadId,
-              user_id: userId,
+              role: 'assistant',
+              content_length: assistantMessage.length,
+              model: activeModel,
+              token_count: totalTokens
+            });
+            
+            const { data, error } = await supabaseAdmin.from('chat_messages').insert({
+              thread_id: threadId,
               role: 'assistant',
               content: assistantMessage,
               metadata: { 
                 model: activeModel,
-                token_count: totalTokens
+                token_count: totalTokens,
+                user_id: userId
               }
-            });
+            }).select();
+            
+            if (error) {
+              console.error('❌ Failed to save assistant message to chat_messages:', {
+                error: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                thread_id: threadId,
+                user_id: userId
+              });
+            } else {
+              console.log('✅ Assistant message saved to chat_messages:', data);
+            }
           }
 
           // Extract and save memories if userId/threadId provided
@@ -455,8 +540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Save memories (same logic as streaming endpoint)
             for (const memory of extractedMemories.short_term) {
               await supabaseAdmin.from('short_term_memory').insert({
-                user_id: userId,
-                thread_id: threadId,
+                  thread_id: threadId,
                 message: memory.display,
                 display_text: memory.display,
                 sender: 'system',
@@ -470,8 +554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const embedding = await generateEmbedding(memory.value, apiKey);
               
               await supabaseAdmin.from('long_term_memory').insert({
-                user_id: userId,
-                category: memory.category,
+                  category: memory.category,
                 key: memory.key,
                 value: memory.value,
                 display_text: memory.display,
