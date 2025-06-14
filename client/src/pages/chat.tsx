@@ -341,6 +341,9 @@ export default function Chat() {
         threadId: threadToUse!.thread_id
       };
 
+      // Show thinking indicator immediately
+      setIsTyping(true);
+
       // Use streaming endpoint
       const response = await fetch("/api/chat/stream", {
         method: "POST",
@@ -357,10 +360,7 @@ export default function Chat() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let streamedContent = "";
-      
-      // Start streaming mode
-      setIsStreaming(true);
-      setStreamingContent("");
+      let hasStartedStreaming = false;
 
       if (reader) {
         while (true) {
@@ -396,6 +396,14 @@ export default function Chat() {
                   // Server might send OpenAI thread ID if using assistants
                   console.log('OpenAI Thread ID:', data.threadId);
                 } else if (data.content) {
+                  // Transition from typing to streaming on first content
+                  if (!hasStartedStreaming) {
+                    setIsTyping(false);
+                    setIsStreaming(true);
+                    setStreamingContent("");
+                    hasStartedStreaming = true;
+                  }
+                  
                   streamedContent += data.content;
                   // Update streaming content in real-time for smooth streaming effect
                   setStreamingContent(streamedContent);
@@ -434,11 +442,9 @@ export default function Chat() {
 
       return { content: streamedContent, role: "assistant" as const };
     },
-    onMutate: () => {
-      setIsTyping(true);
-    },
     onError: (error) => {
       console.error("Failed to send message:", error);
+      setIsTyping(false);
       setIsStreaming(false);
       setStreamingContent("");
       toast({
