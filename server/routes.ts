@@ -222,30 +222,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const response = await userOpenai.chat.completions.create({
-            model: activeModel,
-            messages: [
-              {
-                role: "system",
-                content: systemContent
-              },
-              {
-                role: "user",
-                content: message
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 1000,
-            top_p: 1
-          });
+          const isReasoningModel = /^(o\d|o\d-mini|gpt-4o)/i.test(activeModel);
 
-          const responseText = response.choices[0]?.message?.content || "";
+          const requestParams: any = {
+            model: activeModel,
+            instructions: systemContent,
+            input: message,
+            max_output_tokens: 1000
+          };
+
+          if (!isReasoningModel) {
+            requestParams.temperature = 0.7;
+            requestParams.top_p = 1;
+          }
+
+          const respAny = await (userOpenai as any).responses.create(requestParams);
+
+          let responseText = (respAny.output?.[0]?.content?.[0]?.text as string) || "";
+          let totalTokens = respAny.usage?.total_tokens || 0;
+
           assistantMessage = responseText;
 
-          // Stream the response
+          // Stream the response word by word for UI compatibility
           const words = responseText.split(' ');
           let currentText = "";
-          
           for (let i = 0; i < words.length; i++) {
             const wordToAdd = i === 0 ? words[i] : ' ' + words[i];
             currentText += wordToAdd;
@@ -262,7 +262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               content: assistantMessage,
               metadata: { 
                 model: activeModel,
-                token_count: response.usage?.total_tokens || 0
+                token_count: totalTokens
               }
             });
           }
@@ -403,24 +403,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
             : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
 
-          const response = await userOpenai.chat.completions.create({
-            model: activeModel,
-            messages: [
-              {
-                role: "system",
-                content: systemContent
-              },
-              {
-                role: "user",
-                content: message
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 1000,
-            top_p: 1
-          });
+          const isReasoningModel = /^(o\d|o\d-mini|gpt-4o)/i.test(activeModel);
 
-          assistantMessage = response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response.";
+          const requestParams: any = {
+            model: activeModel,
+            instructions: systemContent,
+            input: message,
+            max_output_tokens: 1000
+          };
+
+          if (!isReasoningModel) {
+            requestParams.temperature = 0.7;
+            requestParams.top_p = 1;
+          }
+
+          const respAny = await (userOpenai as any).responses.create(requestParams);
+
+          let responseText = (respAny.output?.[0]?.content?.[0]?.text as string) || "";
+          let totalTokens = respAny.usage?.total_tokens || 0;
+
+          assistantMessage = responseText;
+
+          // Stream the response word by word for UI compatibility
+          const words = responseText.split(' ');
+          let currentText = "";
+          for (let i = 0; i < words.length; i++) {
+            const wordToAdd = i === 0 ? words[i] : ' ' + words[i];
+            currentText += wordToAdd;
+            res.write(`data: ${JSON.stringify({ content: wordToAdd, done: false })}\n\n`);
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
 
           // Save assistant message to database
           if (userId && threadId) {
@@ -431,7 +443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               content: assistantMessage,
               metadata: { 
                 model: activeModel,
-                token_count: response.usage?.total_tokens || 0
+                token_count: totalTokens
               }
             });
           }
