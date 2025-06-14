@@ -235,7 +235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             ],
             temperature: 0.7,
-            max_completion_tokens: 1000,
+            max_tokens: 1000,
             top_p: 1
           });
 
@@ -416,7 +416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             ],
             temperature: 0.7,
-            max_completion_tokens: 1000,
+            max_tokens: 1000,
             top_p: 1
           });
 

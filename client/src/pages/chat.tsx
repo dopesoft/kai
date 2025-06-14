@@ -240,11 +240,27 @@ export default function Chat() {
   // Restore active thread on mount (from localStorage)
   useEffect(() => {
     const storedThreadId = localStorage.getItem('activeThreadId');
-    console.log('Restore thread effect:', { storedThreadId, effectiveUserId });
-    if (storedThreadId && effectiveUserId) {
-      setActiveThreadId(storedThreadId);
+    console.log('Restore thread effect:', { storedThreadId, effectiveUserId, threads });
+
+    // If user just logged in (has real id), clear any anonymous id
+    if (user?.id) {
+      localStorage.removeItem('anon_user_id');
     }
-  }, [effectiveUserId]);
+
+    if (storedThreadId && effectiveUserId) {
+      // Verify that the stored thread actually belongs to the current user
+      const existsForUser = threads.some((t: ChatThread) => t.thread_id === storedThreadId);
+      if (existsForUser) {
+        setActiveThreadId(storedThreadId);
+      } else {
+        // Remove stale reference so no random selection occurs
+        localStorage.removeItem('activeThreadId');
+        setActiveThreadId(null);
+      }
+    } else {
+      setActiveThreadId(null);
+    }
+  }, [effectiveUserId, threads.length]);
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
