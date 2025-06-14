@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/chat/Header";
 import { Sidebar } from "@/components/chat/Sidebar";
@@ -40,14 +40,12 @@ export default function Chat() {
   const { toast } = useToast();
 
   // Determine the effective user identifier (real auth user or anonymous fallback)
-  const getEffectiveUserId = () => {
+  const effectiveUserId = useMemo(() => {
     const anon = localStorage.getItem('anon_user_id');
     const userId = user?.id || anon || null;
     console.log('getEffectiveUserId:', { userId: user?.id, anon, effectiveUserId: userId });
     return userId;
-  };
-
-  const effectiveUserId = getEffectiveUserId();
+  }, [user?.id]);
 
   // Fetch threads from database
   const { data: threads = [], refetch: refetchThreads } = useQuery({
@@ -61,20 +59,34 @@ export default function Chat() {
     enabled: !!effectiveUserId,
   });
 
+  // Track if we're creating a new thread/sending first message
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
+  
   // Fetch messages when thread changes
   useEffect(() => {
-    console.log('🔄 useEffect triggered - activeThreadId changed:', { activeThreadId, effectiveUserId });
+    console.log('🔄 useEffect triggered - activeThreadId changed:', { 
+      activeThreadId, 
+      effectiveUserId, 
+      isCreatingThread,
+      currentMessagesLength: currentMessages.length 
+    });
+    
+    // Skip if we're creating a thread
+    if (isCreatingThread) {
+      console.log('⏸️ Skipping effect - thread creation in progress');
+      return;
+    }
+    
     if (activeThreadId && effectiveUserId) {
       console.log('✅ Calling fetchThreadMessages for:', activeThreadId);
       fetchThreadMessages(activeThreadId);
-    } else if (!activeThreadId) {
-      // Only clear messages if there's explicitly no active thread
-      console.log('❌ Clearing messages - no active thread');
-      setCurrentMessages([]);
+    } else if (!activeThreadId && currentMessages.length === 0) {
+      // Only clear if we don't have messages already
+      console.log('❌ No active thread and no messages - staying in welcome state');
       setCurrentThread(null);
     }
-    // Don't clear messages if we're just waiting for effectiveUserId
-  }, [activeThreadId, effectiveUserId]);
+    // Don't clear messages if we have them
+  }, [activeThreadId, effectiveUserId, isCreatingThread]);
 
   const fetchThreadMessages = async (threadId: string) => {
     try {
@@ -310,6 +322,8 @@ export default function Chat() {
       // If no active thread, create a new one
       let threadToUse = currentThread;
       if (!threadToUse) {
+        setIsCreatingThread(true); // Prevent effect from clearing messages
+        
         // Generate title from first message
         const words = message.split(' ').slice(0, 4);
         const title = words.join(' ') + (message.split(' ').length > 4 ? '...' : '');
@@ -320,6 +334,8 @@ export default function Chat() {
         setCurrentThread(threadToUse);
         setActiveThreadId(threadToUse!.thread_id);
         localStorage.setItem('activeThreadId', threadToUse!.thread_id);
+        
+        setIsCreatingThread(false); // Re-enable effect
       }
 
       // Get API key from database integrations
@@ -467,6 +483,7 @@ export default function Chat() {
       setIsTyping(false);
       setIsStreaming(false);
       setStreamingContent("");
+      setIsCreatingThread(false); // Reset flag on error
       
       // Don't clear messages on error - keep the user message visible
       // Remove the last message only if it was the user message we just added
