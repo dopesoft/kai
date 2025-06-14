@@ -30,6 +30,10 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
     
     let processed = text;
     
+    // Remove horizontal lines made of dashes (─ or - repeated)
+    processed = processed.replace(/^[─\-]{3,}\s*/gm, '');
+    processed = processed.replace(/\n[─\-]{3,}\s*/g, '\n');
+    
     // First, ensure bullet points are on new lines (fix inline bullets)
     // Replace " • " in the middle of text with newline + bullet
     processed = processed.replace(/ • /g, '\n- ');
