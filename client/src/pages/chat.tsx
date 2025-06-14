@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/use-auth";
 import type { Message, ChatRequest } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { nanoid } from 'nanoid';
+import { integrationService } from "@/lib/integrations";
 
 // Define chat thread type
 interface ChatThread {
@@ -196,16 +197,35 @@ export default function Chat() {
         localStorage.setItem('activeThreadId', threadToUse!.thread_id);
       }
 
-      // Check for verified integrations
-      const verifiedIntegrations = JSON.parse(localStorage.getItem("verified_integrations") || "[]");
-      const openaiIntegration = verifiedIntegrations.find((i: any) => i.provider === "openai");
+      // Get API key from database integrations
+      let apiKey: string | undefined;
+      let model: string | undefined;
       
-      if (!openaiIntegration) {
-        throw new Error("No verified AI integration found. Please configure an OpenAI integration in Settings.");
+      if (user && authEnabled) {
+        // Try to get from database first
+        const openaiIntegration = await integrationService.getIntegrationByProvider(user.id, 'openai');
+        if (openaiIntegration) {
+          apiKey = openaiIntegration.api_key;
+          model = openaiIntegration.config?.model;
+        }
       }
-
-      const apiKey = localStorage.getItem("chatgpt_api_key") || undefined;
-      const model = localStorage.getItem("chatgpt_model") || undefined;
+      
+      // Fallback to localStorage if not in database
+      if (!apiKey) {
+        const verifiedIntegrations = JSON.parse(localStorage.getItem("verified_integrations") || "[]");
+        const openaiIntegration = verifiedIntegrations.find((i: any) => i.provider === "openai");
+        
+        if (!openaiIntegration) {
+          throw new Error("No verified AI integration found. Please configure an OpenAI integration in Settings.");
+        }
+        
+        apiKey = localStorage.getItem("chatgpt_api_key") || undefined;
+        model = localStorage.getItem("chatgpt_model") || undefined;
+      }
+      
+      if (!apiKey) {
+        throw new Error("No API key found. Please configure an AI integration in Settings.");
+      }
       
       // Add user message to UI immediately
       const userMessage: Message = {

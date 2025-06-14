@@ -18,17 +18,9 @@ import { AuthSetupBanner } from "@/components/auth/AuthSetupBanner";
 import { Header } from "@/components/chat/Header";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { useAuth } from "@/lib/use-auth";
+import { integrationService, type Integration } from "@/lib/integrations";
 
-// Add interface for integration type
-interface Integration {
-  id: string;
-  type: "CALENDAR" | "MAIL" | "AI";
-  name: string;
-  provider?: string;
-  account: string;
-  status: string;
-  icon?: string;
-}
+// Integration interface is now imported from integrations service
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -74,18 +66,9 @@ export default function Settings() {
     biography: ""
   });
 
-  // Get real integrations based on what's actually configured and tested
-  const getConfiguredIntegrations = () => {
-    const integrations = [];
-    
-    // Only show integrations that have been tested and verified
-    const verifiedIntegrations = JSON.parse(localStorage.getItem("verified_integrations") || "[]");
-    
-    return verifiedIntegrations;
-  };
-
-  const [integrations, setIntegrations] = useState(getConfiguredIntegrations());
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [testingIntegration, setTestingIntegration] = useState(false);
+  const [loadingIntegrations, setLoadingIntegrations] = useState(true);
 
   // Load profile data when component mounts or profile changes
   useEffect(() => {
@@ -126,6 +109,50 @@ export default function Settings() {
       });
     }
   }, [profile, user]);
+
+  // Load integrations from database when component mounts
+  useEffect(() => {
+    const loadIntegrations = async () => {
+      if (user && authEnabled) {
+        setLoadingIntegrations(true);
+        try {
+          // First, migrate any existing localStorage integrations
+          await integrationService.migrateFromLocalStorage(user.id);
+          
+          // Then load all integrations from database
+          const dbIntegrations = await integrationService.getIntegrations(user.id);
+          
+          // Transform database integrations to match UI format
+          const transformedIntegrations = dbIntegrations.map(dbInt => ({
+            id: dbInt.id || dbInt.provider,
+            type: dbInt.type,
+            name: dbInt.provider === 'openai' ? 'OpenAI' : 
+                  dbInt.provider === 'claude' ? 'Anthropic Claude' : 
+                  dbInt.provider === 'gemini' ? 'Google Gemini' : dbInt.provider,
+            provider: dbInt.provider,
+            account: dbInt.config?.model || 'Default',
+            status: 'CONNECTED',
+            icon: dbInt.provider === 'openai' ? '🤖' : 
+                  dbInt.provider === 'claude' ? '🧠' : 
+                  dbInt.provider === 'gemini' ? '💎' : '🔗'
+          }));
+          
+          setIntegrations(transformedIntegrations);
+        } catch (error) {
+          console.error('Failed to load integrations:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load integrations",
+            variant: "destructive"
+          });
+        } finally {
+          setLoadingIntegrations(false);
+        }
+      }
+    };
+    
+    loadIntegrations();
+  }, [user, authEnabled]);
 
   // Handle profile save - map form fields back to Supabase
   const handleProfileSave = async () => {
@@ -264,10 +291,20 @@ export default function Settings() {
 
   // Save and verify integration
   const saveAndVerifyIntegration = async (type: string, provider: string, name: string, apiKey: string, model?: string) => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to save integrations",
+        variant: "destructive"
+      });
+      return false;
+    }
+    
     setTestingIntegration(true);
     
     let isConnected = false;
     
+    // Test the connection
     if (provider === "openai") {
       isConnected = await testOpenAIConnection(apiKey, model || "o4-mini");
     } else if (provider === "claude") {
@@ -277,47 +314,76 @@ export default function Settings() {
     }
     
     if (isConnected) {
-      const newIntegration = {
-        id: provider,
-        type: type,
-        name: name,
-        provider: provider,
-        account: "API Key verified",
-        status: "CONNECTED",
-        icon: provider === "openai" ? "🤖" : provider === "claude" ? "🧠" : "💎"
-      };
-      
-      // Save to verified integrations
-      const verifiedIntegrations = JSON.parse(localStorage.getItem("verified_integrations") || "[]");
-      const existingIndex = verifiedIntegrations.findIndex((i: any) => i.provider === provider);
-      
-      if (existingIndex >= 0) {
-        verifiedIntegrations[existingIndex] = newIntegration;
-      } else {
-        verifiedIntegrations.push(newIntegration);
+      try {
+        // Check if integration already exists
+        const existingIntegrations = await integrationService.getIntegrations(user.id);
+        const existing = existingIntegrations.find(i => i.provider === provider);
+        
+        if (existing) {
+          // Update existing integration
+          await integrationService.updateIntegration(existing.id!, user.id, {
+            api_key: apiKey,
+            config: { model: model },
+            is_active: true
+          });
+        } else {
+          // Create new integration
+          await integrationService.createIntegration({
+            user_id: user.id,
+            type: type as 'AI' | 'CALENDAR' | 'MAIL',
+            provider: provider,
+            api_key: apiKey,
+            config: { model: model },
+            is_active: true
+          });
+        }
+        
+        // Reload integrations from database
+        const updatedIntegrations = await integrationService.getIntegrations(user.id);
+        const transformedIntegrations = updatedIntegrations.map(dbInt => ({
+          id: dbInt.id || dbInt.provider,
+          type: dbInt.type,
+          name: dbInt.provider === 'openai' ? 'OpenAI' : 
+                dbInt.provider === 'claude' ? 'Anthropic Claude' : 
+                dbInt.provider === 'gemini' ? 'Google Gemini' : dbInt.provider,
+          provider: dbInt.provider,
+          account: dbInt.config?.model || 'Default',
+          status: 'CONNECTED',
+          icon: dbInt.provider === 'openai' ? '🤖' : 
+                dbInt.provider === 'claude' ? '🧠' : 
+                dbInt.provider === 'gemini' ? '💎' : '🔗'
+        }));
+        
+        setIntegrations(transformedIntegrations);
+        
+        // Also update localStorage for backward compatibility
+        if (provider === "openai") {
+          localStorage.setItem("chatgpt_api_key", apiKey);
+          localStorage.setItem("chatgpt_model", model || "o4-mini");
+          setChatgptKey(apiKey);
+          setSelectedModel(model || "o4-mini");
+        } else if (provider === "claude") {
+          localStorage.setItem("claude_api_key", apiKey);
+          localStorage.setItem("claude_model", model || "claude-3-5-sonnet-20241022");
+        } else if (provider === "gemini") {
+          localStorage.setItem("gemini_api_key", apiKey);
+          localStorage.setItem("gemini_model", model || "gemini-1.5-pro");
+        }
+        
+        toast({
+          title: "Integration connected",
+          description: `${name} has been successfully connected and verified.`,
+        });
+      } catch (error) {
+        console.error('Failed to save integration:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save integration to database",
+          variant: "destructive"
+        });
+        setTestingIntegration(false);
+        return false;
       }
-      
-      localStorage.setItem("verified_integrations", JSON.stringify(verifiedIntegrations));
-      setIntegrations(verifiedIntegrations);
-      
-      // Save API keys and model for the specific provider
-      if (provider === "openai") {
-        localStorage.setItem("chatgpt_api_key", apiKey);
-        localStorage.setItem("chatgpt_model", model || "o4-mini");
-        setChatgptKey(apiKey);
-        setSelectedModel(model || "o4-mini");
-      } else if (provider === "claude") {
-        localStorage.setItem("claude_api_key", apiKey);
-        localStorage.setItem("claude_model", model || "claude-3-5-sonnet-20241022");
-      } else if (provider === "gemini") {
-        localStorage.setItem("gemini_api_key", apiKey);
-        localStorage.setItem("gemini_model", model || "gemini-1.5-pro");
-      }
-      
-      toast({
-        title: "Integration connected",
-        description: `${name} has been successfully connected and verified.`,
-      });
     } else {
       toast({
         title: "Connection failed",
@@ -331,24 +397,64 @@ export default function Settings() {
   };
 
   // Remove integration
-  const removeIntegration = (integrationId: string) => {
-    const verifiedIntegrations = JSON.parse(localStorage.getItem("verified_integrations") || "[]");
-    const filteredIntegrations = verifiedIntegrations.filter((i: any) => i.id !== integrationId);
-    localStorage.setItem("verified_integrations", JSON.stringify(filteredIntegrations));
-    setIntegrations(filteredIntegrations);
+  const removeIntegration = async (integrationId: string) => {
+    if (!user) return;
     
-    // Also clear related localStorage keys
-    if (integrationId === "openai") {
-      localStorage.removeItem("chatgpt_api_key");
-      localStorage.removeItem("chatgpt_model");
-      setChatgptKey("");
-      setSelectedModel("o4-mini");
+    try {
+      const integration = integrations.find(i => i.id === integrationId);
+      if (!integration) return;
+      
+      // Delete from database
+      const success = await integrationService.deleteIntegration(integrationId, user.id);
+      
+      if (success) {
+        // Reload integrations
+        const updatedIntegrations = await integrationService.getIntegrations(user.id);
+        const transformedIntegrations = updatedIntegrations.map(dbInt => ({
+          id: dbInt.id || dbInt.provider,
+          type: dbInt.type,
+          name: dbInt.provider === 'openai' ? 'OpenAI' : 
+                dbInt.provider === 'claude' ? 'Anthropic Claude' : 
+                dbInt.provider === 'gemini' ? 'Google Gemini' : dbInt.provider,
+          provider: dbInt.provider,
+          account: dbInt.config?.model || 'Default',
+          status: 'CONNECTED',
+          icon: dbInt.provider === 'openai' ? '🤖' : 
+                dbInt.provider === 'claude' ? '🧠' : 
+                dbInt.provider === 'gemini' ? '💎' : '🔗'
+        }));
+        
+        setIntegrations(transformedIntegrations);
+        
+        // Also clear related localStorage keys for backward compatibility
+        if (integration.provider === "openai") {
+          localStorage.removeItem("chatgpt_api_key");
+          localStorage.removeItem("chatgpt_model");
+          setChatgptKey("");
+          setSelectedModel("o4-mini");
+        } else if (integration.provider === "claude") {
+          localStorage.removeItem("claude_api_key");
+          localStorage.removeItem("claude_model");
+        } else if (integration.provider === "gemini") {
+          localStorage.removeItem("gemini_api_key");
+          localStorage.removeItem("gemini_model");
+        }
+        
+        toast({
+          title: "Integration removed",
+          description: "The integration has been disconnected and removed.",
+        });
+      } else {
+        throw new Error('Failed to delete integration');
+      }
+    } catch (error) {
+      console.error('Failed to remove integration:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove integration",
+        variant: "destructive"
+      });
     }
-    
-    toast({
-      title: "Integration removed",
-      description: "The integration has been disconnected and removed.",
-    });
   };
 
   const handleClose = () => {
@@ -409,30 +515,34 @@ export default function Settings() {
     setEditFormData({ apiKey: "", email: "", model: "", calendarUrl: "" });
   };
 
-  const handleEditIntegration = (integration: Integration) => {
+  const handleEditIntegration = async (integration: Integration) => {
     setEditingIntegration(integration);
-    setEditFormData({
-      apiKey: integration.type === "AI" ? chatgptKey : "",
-      email: integration.account || "",
-      model: integration.type === "AI" ? selectedModel : "",
-      calendarUrl: ""
-    });
+    
+    // Load the current values from database
+    if (user && integration.provider) {
+      const dbIntegration = await integrationService.getIntegrationByProvider(user.id, integration.provider);
+      if (dbIntegration) {
+        setEditFormData({
+          apiKey: dbIntegration.api_key || "",
+          email: integration.account || "",
+          model: dbIntegration.config?.model || "",
+          calendarUrl: ""
+        });
+      }
+    }
+    
     setIsEditModalOpen(true);
   };
 
   const handleSaveEdit = async () => {
-    if (editingIntegration?.type === "AI" && editingIntegration?.provider === "openai") {
-      // Save to localStorage first
-      localStorage.setItem("chatgpt_api_key", editFormData.apiKey);
-      localStorage.setItem("chatgpt_model", editFormData.model);
-      setChatgptKey(editFormData.apiKey);
-      setSelectedModel(editFormData.model);
-      
+    if (!editingIntegration || !user) return;
+    
+    if (editingIntegration.type === "AI" && editingIntegration.provider) {
       // Test and verify the connection
       const isConnected = await saveAndVerifyIntegration(
         "AI",
-        "openai", 
-        "OpenAI",
+        editingIntegration.provider, 
+        editingIntegration.name,
         editFormData.apiKey,
         editFormData.model
       );
@@ -440,6 +550,7 @@ export default function Settings() {
       if (isConnected) {
         setIsEditModalOpen(false);
         setEditingIntegration(null);
+        setEditFormData({ apiKey: "", email: "", model: "", calendarUrl: "" });
       }
     }
   };
