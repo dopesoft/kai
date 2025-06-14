@@ -256,6 +256,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'Access-Control-Allow-Headers': 'Cache-Control'
       });
 
+      // Log what we received
+      console.log('🔍 Request data:', {
+        hasUserId: !!userId,
+        hasThreadId: !!threadId,
+        userId,
+        threadId,
+        messageLength: message?.length
+      });
+      
       // Save user message to database if userId provided
       if (userId && threadId) {
         console.log('💾 Attempting to save user message to chat_messages...', {

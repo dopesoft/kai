@@ -184,8 +184,12 @@ export default function Chat() {
       console.log('Thread creation response:', data); // Debug log
       return data;
     },
-    onSuccess: () => {
-      refetchThreads();
+    onSuccess: (data) => {
+      // Don't refetch threads immediately - it causes UI flash
+      // Instead, optimistically add the new thread to the list
+      queryClient.setQueryData(['threads', effectiveUserId], (old: any) => {
+        return old ? [...old, data] : [data];
+      });
     }
   });
 
@@ -251,6 +255,12 @@ export default function Chat() {
     // If user just logged in (has real id), clear any anonymous id
     if (user?.id) {
       localStorage.removeItem('anon_user_id');
+    }
+
+    // Skip restoration if we already have messages (user just sent a message)
+    if (currentMessages.length > 0) {
+      console.log('Skipping thread restoration - messages already present');
+      return;
     }
 
     // Only try to restore if we have both user ID and threads loaded
@@ -345,6 +355,13 @@ export default function Chat() {
       };
 
       // Use streaming endpoint
+      console.log('📤 Sending request with:', {
+        userId: requestData.userId,
+        threadId: requestData.threadId,
+        hasApiKey: !!requestData.apiKey,
+        model: requestData.model
+      });
+      
       const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: {
@@ -354,7 +371,9 @@ export default function Chat() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to send message");
+        const errorText = await response.text();
+        console.error('❌ Response not OK:', response.status, errorText);
+        throw new Error(`Failed to send message: ${response.status} ${errorText}`);
       }
 
       const reader = response.body?.getReader();
@@ -448,9 +467,20 @@ export default function Chat() {
       setIsTyping(false);
       setIsStreaming(false);
       setStreamingContent("");
+      
+      // Don't clear messages on error - keep the user message visible
+      // Remove the last message only if it was the user message we just added
+      setCurrentMessages(prev => {
+        if (prev.length > 0 && prev[prev.length - 1].role === "user") {
+          // Keep the message but show error
+          return prev;
+        }
+        return prev;
+      });
+      
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to send message. Please try again.",
         variant: "destructive",
       });
     },
