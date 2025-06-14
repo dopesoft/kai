@@ -2,8 +2,14 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+console.log('Serverless function environment check:', {
+  hasUrl: !!supabaseUrl,
+  hasServiceKey: !!supabaseServiceRoleKey,
+  urlPreview: supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'NOT SET'
+});
 
 const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
   ? createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -16,7 +22,13 @@ const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
   : null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('Thread API called:', req.method, req.url, req.query);
+  console.log('Thread API called:', {
+    method: req.method,
+    url: req.url,
+    query: req.query,
+    headers: req.headers,
+    timestamp: new Date().toISOString()
+  });
   
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -28,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   );
 
   if (req.method === 'OPTIONS') {
+    console.log('OPTIONS request handled');
     res.status(200).end();
     return;
   }
@@ -45,6 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { user_id } = req.query;
       
       if (!supabaseAdmin) {
+        console.log('Supabase not configured, returning mock data');
         // Return mock data if Supabase is not configured
         return res.json({
           thread_id: threadId,
@@ -62,8 +76,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (threadError || !threadData) {
-        console.error('Thread not found:', threadError);
-        return res.status(404).json({ error: 'Thread not found' });
+        console.error('Thread not found:', {
+          threadId,
+          user_id,
+          error: threadError,
+          data: threadData
+        });
+        return res.status(404).json({ 
+          error: 'Thread not found',
+          details: threadError?.message || 'No thread data returned',
+          threadId,
+          user_id
+        });
       }
 
       // Then get messages for this thread

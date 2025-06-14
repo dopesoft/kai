@@ -2,14 +2,14 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase admin client for Vercel
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
 // Log initialization for debugging
 console.log('Initializing Supabase in Vercel function:', {
   hasUrl: !!supabaseUrl,
   hasServiceKey: !!supabaseServiceRoleKey,
-  url: supabaseUrl || 'NOT SET',
+  urlPreview: supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'NOT SET',
 });
 
 const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey

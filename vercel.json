@@ -3,6 +3,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "functions": {
+    "api/test.ts": {
+      "maxDuration": 10
+    },
     "api/chat/threads.ts": {
       "maxDuration": 30
     },
@@ -26,7 +29,6 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

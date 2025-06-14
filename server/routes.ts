@@ -509,191 +509,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== NEW CHAT PERSISTENCE ENDPOINTS =====
+  // ===== CHAT PERSISTENCE ENDPOINTS =====
+  // Note: These endpoints are only used in development mode.
+  // In production (Vercel), the /api/ folder serverless functions handle these routes.
   
-  // Create a new chat thread
-  app.post("/api/chat/threads", async (req, res) => {
-    try {
-      const { user_id, thread_id, title } = req.body;
-      
-      if (!user_id || !thread_id) {
-        return res.status(400).json({ error: "user_id and thread_id are required" });
-      }
-      
-      // Check if Supabase admin is initialized
-      if (!supabaseAdmin) {
-        console.error('❌ Supabase admin client is not initialized');
-        return res.status(500).json({ 
-          error: "Database connection not configured",
-          details: "Supabase admin client not initialized"
+  // Only register these routes if NOT in production mode
+  if (process.env.NODE_ENV !== "production") {
+    // Create a new chat thread
+    app.post("/api/chat/threads", async (req, res) => {
+      try {
+        const { user_id, thread_id, title } = req.body;
+        
+        if (!user_id || !thread_id) {
+          return res.status(400).json({ error: "user_id and thread_id are required" });
+        }
+        
+        // Check if Supabase admin is initialized
+        if (!supabaseAdmin) {
+          console.error('❌ Supabase admin client is not initialized');
+          return res.status(500).json({ 
+            error: "Database connection not configured",
+            details: "Supabase admin client not initialized"
+          });
+        }
+        
+        const { data, error } = await supabaseAdmin
+          .from('chat_threads')
+          .insert({
+            user_id,
+            thread_id,
+            title: title || 'New Chat',
+            metadata: {}
+          })
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Error creating chat thread:', {
+            error,
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          });
+          return res.status(500).json({ 
+            error: "Failed to create thread",
+            code: error.code,
+            message: error.message
+          });
+        }
+        
+        res.json(data);
+      } catch (error) {
+        console.error("Create thread endpoint error:", error);
+        res.status(500).json({ 
+          error: "Internal server error",
+          message: error instanceof Error ? error.message : "Unknown error"
         });
       }
-      
-      const { data, error } = await supabaseAdmin
-        .from('chat_threads')
-        .insert({
-          user_id,
-          thread_id,
-          title: title || 'New Chat',
-          metadata: {}
-        })
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('Error creating chat thread:', {
-          error,
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
+    });
+    
+    // Get all threads for a user
+    app.get("/api/chat/threads", async (req, res) => {
+      try {
+        const { user_id } = req.query;
+        
+        if (!user_id) {
+          return res.status(400).json({ error: "user_id is required" });
+        }
+        
+        const { data, error } = await supabaseAdmin
+          .from('chat_threads')
+          .select('*')
+          .eq('user_id', user_id)
+          .eq('archived', false)
+          .order('updated_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching threads:', error);
+          return res.status(500).json({ error: "Failed to fetch threads" });
+        }
+        
+        res.json(data || []);
+      } catch (error) {
+        console.error("Fetch threads endpoint error:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+    
+    // Get a specific thread with its messages
+    app.get("/api/chat/threads/:threadId", async (req, res) => {
+      try {
+        const { threadId } = req.params;
+        const { user_id } = req.query;
+        
+        if (!user_id) {
+          return res.status(400).json({ error: "user_id is required" });
+        }
+        
+        // Get thread details
+        const { data: thread, error: threadError } = await supabaseAdmin
+          .from('chat_threads')
+          .select('*')
+          .eq('thread_id', threadId)
+          .eq('user_id', user_id)
+          .single();
+        
+        if (threadError || !thread) {
+          return res.status(404).json({ error: "Thread not found" });
+        }
+        
+        // Get messages for the thread
+        const { data: messages, error: messagesError } = await supabaseAdmin
+          .from('chat_messages')
+          .select('*')
+          .eq('thread_id', threadId)
+          .order('created_at', { ascending: true });
+        
+        if (messagesError) {
+          console.error('Error fetching messages:', messagesError);
+          return res.status(500).json({ error: "Failed to fetch messages" });
+        }
+        
+        res.json({
+          ...thread,
+          messages: messages || []
         });
-        return res.status(500).json({ 
-          error: "Failed to create thread",
-          code: error.code,
-          message: error.message
-        });
+      } catch (error) {
+        console.error("Fetch thread endpoint error:", error);
+        res.status(500).json({ error: "Internal server error" });
       }
-      
-      res.json(data);
-    } catch (error) {
-      console.error("Create thread endpoint error:", error);
-      res.status(500).json({ 
-        error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error"
-      });
-    }
-  });
-  
-  // Get all threads for a user
-  app.get("/api/chat/threads", async (req, res) => {
-    try {
-      const { user_id } = req.query;
-      
-      if (!user_id) {
-        return res.status(400).json({ error: "user_id is required" });
+    });
+    
+    // Delete thread (archive)
+    app.delete("/api/chat/threads/:threadId", async (req, res) => {
+      try {
+        const { threadId } = req.params;
+        
+        // Archive instead of hard delete
+        const { error } = await supabaseAdmin
+          .from('chat_threads')
+          .update({ 
+            archived: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('thread_id', threadId);
+        
+        if (error) {
+          console.error('Error archiving thread:', error);
+          return res.status(500).json({ error: "Failed to archive thread" });
+        }
+        
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Delete thread endpoint error:", error);
+        res.status(500).json({ error: "Internal server error" });
       }
-      
-      const { data, error } = await supabaseAdmin
-        .from('chat_threads')
-        .select('*')
-        .eq('user_id', user_id)
-        .eq('archived', false)
-        .order('updated_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching threads:', error);
-        return res.status(500).json({ error: "Failed to fetch threads" });
-      }
-      
-      res.json(data || []);
-    } catch (error) {
-      console.error("Fetch threads endpoint error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-  
-  // Get a specific thread with its messages
-  app.get("/api/chat/threads/:threadId", async (req, res) => {
-    try {
-      const { threadId } = req.params;
-      const { user_id } = req.query;
-      
-      if (!user_id) {
-        return res.status(400).json({ error: "user_id is required" });
-      }
-      
-      // Get thread details
-      const { data: thread, error: threadError } = await supabaseAdmin
-        .from('chat_threads')
-        .select('*')
-        .eq('thread_id', threadId)
-        .eq('user_id', user_id)
-        .single();
-      
-      if (threadError || !thread) {
-        return res.status(404).json({ error: "Thread not found" });
-      }
-      
-      // Get messages for the thread
-      const { data: messages, error: messagesError } = await supabaseAdmin
-        .from('chat_messages')
-        .select('*')
-        .eq('thread_id', threadId)
-        .order('created_at', { ascending: true });
-      
-      if (messagesError) {
-        console.error('Error fetching messages:', messagesError);
-        return res.status(500).json({ error: "Failed to fetch messages" });
-      }
-      
-      res.json({
-        ...thread,
-        messages: messages || []
-      });
-    } catch (error) {
-      console.error("Fetch thread endpoint error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-  
-  // Update thread title
-  app.put("/api/chat/threads/:threadId", async (req, res) => {
-    try {
-      const { threadId } = req.params;
-      const { title } = req.body;
-      
-      if (!title) {
-        return res.status(400).json({ error: "title is required" });
-      }
-      
-      const { data, error } = await supabaseAdmin
-        .from('chat_threads')
-        .update({ 
-          title,
-          updated_at: new Date().toISOString()
-        })
-        .eq('thread_id', threadId)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('Error updating thread:', error);
-        return res.status(500).json({ error: "Failed to update thread" });
-      }
-      
-      res.json(data);
-    } catch (error) {
-      console.error("Update thread endpoint error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-  
-  // Delete thread (archive)
-  app.delete("/api/chat/threads/:threadId", async (req, res) => {
-    try {
-      const { threadId } = req.params;
-      
-      // Archive instead of hard delete
-      const { error } = await supabaseAdmin
-        .from('chat_threads')
-        .update({ 
-          archived: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('thread_id', threadId);
-      
-      if (error) {
-        console.error('Error archiving thread:', error);
-        return res.status(500).json({ error: "Failed to archive thread" });
-      }
-      
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Delete thread endpoint error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
+    });
+  }
 
   // Memory API endpoints - ALL UPDATED TO USE supabaseAdmin
   
