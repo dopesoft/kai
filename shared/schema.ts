@@ -35,6 +35,8 @@ export const chatRequestSchema = z.object({
   message: z.string().min(1).max(4000),
   apiKey: z.string().optional(),
   model: z.string().optional(),
+  userId: z.string().optional(),
+  threadId: z.string().optional(),  // CHANGED: from sessionId to threadId
 });
 
 export const chatResponseSchema = z.object({

@@ -3,16 +3,170 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { chatRequestSchema, type ChatResponse } from "@shared/schema";
 import OpenAI from "openai";
+import { supabase, supabaseAdmin } from './supabase';
+import { nanoid } from 'nanoid';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "demo_key"
 });
 
+// Helper to generate embeddings
+async function generateEmbedding(text: string, apiKey?: string): Promise<number[]> {
+  const client = apiKey ? new OpenAI({ apiKey }) : openai;
+  const response = await client.embeddings.create({
+    model: "text-embedding-3-small",
+    input: text,
+  });
+  return response.data[0].embedding;
+}
+
+// Fetch relevant memories
+async function fetchMemories(userId: string, threadId: string, userMessage: string, apiKey?: string) {
+  console.log('🔍 Fetching memories for:', { userId, threadId });
+  
+  // 1. Get recent short-term memories for this thread
+  const { data: shortTermMemories, error: shortError } = await supabaseAdmin
+    .from('short_term_memory')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('thread_id', threadId)
+    .order('timestamp', { ascending: false })
+    .limit(10);
+
+  if (shortError) {
+    console.error('❌ Short-term memory fetch error:', shortError);
+  } else {
+    console.log('✅ Short-term memories found:', shortTermMemories?.length || 0);
+  }
+
+  // 2. Get relevant long-term memories using semantic search
+  const messageEmbedding = await generateEmbedding(userMessage, apiKey);
+  
+  const { data: longTermMemories, error: longError } = await supabaseAdmin.rpc('match_memories', {
+    query_embedding: messageEmbedding,
+    match_threshold: 0.7,
+    match_count: 5,
+    user_id: userId
+  });
+
+  if (longError) {
+    console.error('❌ Long-term memory fetch error:', longError);
+  } else {
+    console.log('✅ Long-term memories found:', longTermMemories?.length || 0);
+  }
+
+  return { shortTermMemories, longTermMemories };
+}
+
+// Extract memories from conversation
+async function extractMemories(userMessage: string, assistantMessage: string, apiKey?: string) {
+  console.log('🧠 Extracting memories from conversation...');
+  
+  const client = apiKey ? new OpenAI({ apiKey }) : openai;
+  
+  const extractionPrompt = `Look at this conversation and identify anything worth remembering.
+
+User: ${userMessage}
+Assistant: ${assistantMessage}
+
+Return a JSON object with:
+- "short_term": temporary context about THIS conversation with:
+  - display: natural language version of the context
+  - tags: relevant tags as array
+- "long_term": permanent facts about the user with:
+  - category: type of information (personal, dates, preferences, goals, context)
+  - key: snake_case identifier
+  - value: the actual value
+  - display: natural language version
+  - importance: 1-5
+
+Example response:
+{
+  "short_term": [
+    {
+      "display": "User is planning a birthday party for their wife",
+      "tags": ["birthday", "planning", "wife"]
+    }
+  ],
+  "long_term": [
+    {
+      "category": "personal",
+      "key": "wife_name", 
+      "value": "Ariana",
+      "display": "My wife's name is Ariana",
+      "importance": 5
+    },
+    {
+      "category": "dates",
+      "key": "wife_birthday",
+      "value": "September 12",
+      "display": "My wife Ariana's birthday is September 12th",
+      "importance": 5
+    }
+  ]
+}
+
+Be smart about what matters. Generate natural, conversational display text.`;
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4",
+      messages: [{ role: "user", content: extractionPrompt }],
+      temperature: 0.7,
+    });
+
+    const content = response.choices[0].message.content || '{"short_term":[],"long_term":[]}';
+    console.log('📝 Raw extraction response:', content);
+    
+    const extracted = JSON.parse(content);
+    console.log('📝 Parsed memories:', extracted);
+    return extracted;
+  } catch (error) {
+    console.error('❌ Memory extraction error:', error);
+    return { short_term: [], long_term: [] };
+  }
+}
+
+// Helper to format memories into context
+function buildMemoryContext(shortTerm: any[], longTerm: any[]): string {
+  let context = '';
+
+  if (longTerm?.length > 0) {
+    context += 'Long-term memories:\n';
+    longTerm.forEach(m => {
+      context += `- ${m.display_text || `${m.key}: ${m.value}`}\n`;
+    });
+  }
+
+  if (shortTerm?.length > 0) {
+    context += '\nRecent conversation context:\n';
+    shortTerm.slice(0, 5).forEach(m => {
+      context += `- ${m.display_text || m.message}\n`;
+    });
+  }
+
+  return context;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Chat streaming endpoint
+  // Chat streaming endpoint with memory
   app.post("/api/chat/stream", async (req, res) => {
     try {
-      const { message, apiKey, model } = chatRequestSchema.parse(req.body);
+      // First, let's see what we're receiving
+      console.log('📨 Received request body:', {
+        hasMessage: !!req.body.message,
+        hasApiKey: !!req.body.apiKey,
+        hasModel: !!req.body.model,
+        hasUserId: !!req.body.userId,
+        hasThreadId: !!req.body.threadId,
+        userId: req.body.userId,
+        threadId: req.body.threadId
+      });
+
+      const { message, apiKey, model, userId, threadId } = req.body;
+      
+      // Parse only the required fields
+      const parsedData = chatRequestSchema.parse({ message, apiKey, model });
 
       // Set up SSE headers
       res.writeHead(200, {
@@ -29,62 +183,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "user"
       });
 
-      // Use client-provided API key or fallback to server environment variable
+      // Fetch memories if userId and threadId provided
+      let memoryContext = '';
+      if (userId && threadId) {
+        console.log('✅ User ID and Thread ID present, fetching memories...');
+        const { shortTermMemories, longTermMemories } = await fetchMemories(userId, threadId, message, apiKey);
+        memoryContext = buildMemoryContext(shortTermMemories, longTermMemories);
+        console.log('📋 Memory context built:', memoryContext ? 'Has context' : 'No context');
+      } else {
+        console.log('⚠️ Missing userId or threadId, skipping memory fetch');
+      }
+
       const activeApiKey = apiKey || process.env.OPENAI_API_KEY;
-      const activeModel = model || "gpt-4o";
+      const activeModel = model || "o4-mini";
 
       let assistantMessage = "";
 
-      // Add a thinking delay
+      // Add thinking delay
       await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
       if (activeApiKey && activeApiKey !== "demo_key") {
         try {
-          // Create OpenAI client with user's API key
-          const userOpenai = new OpenAI({
-            apiKey: activeApiKey,
-          });
+          const userOpenai = new OpenAI({ apiKey: activeApiKey });
 
-          const response = await userOpenai.responses.create({
+          // Enhanced system prompt with memory context
+          const systemContent = memoryContext 
+            ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
+            : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
+
+          const response = await userOpenai.chat.completions.create({
             model: activeModel,
-            input: [
+            messages: [
               {
-                "role": "system",
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses."
-                  }
-                ]
+                role: "system",
+                content: systemContent
               },
               {
-                "role": "user", 
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": message
-                  }
-                ]
+                role: "user",
+                content: message
               }
             ],
-            text: {
-              "format": {
-                "type": "text"
-              }
-            },
-            reasoning: {},
-            tools: [],
             temperature: 0.7,
-            max_output_tokens: 1000,
-            top_p: 1,
-            store: true
+            max_completion_tokens: 1000,
+            top_p: 1
           });
 
-          // Extract the response text content
-          const responseText = response.output_text || "";
+          const responseText = response.choices[0]?.message?.content || "";
           assistantMessage = responseText;
 
-          // Simulate streaming by breaking the response into chunks
+          // Stream the response
           const words = responseText.split(' ');
           let currentText = "";
           
@@ -92,9 +239,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const wordToAdd = i === 0 ? words[i] : ' ' + words[i];
             currentText += wordToAdd;
             res.write(`data: ${JSON.stringify({ content: wordToAdd, done: false })}\n\n`);
-            // Small delay between chunks for more natural streaming
             await new Promise(resolve => setTimeout(resolve, 50));
           }
+
+          // Extract and save memories if userId/threadId provided
+          if (userId && threadId) {
+            console.log('🎯 Attempting to extract and save memories...');
+            const extractedMemories = await extractMemories(message, assistantMessage, apiKey);
+
+            // Save short-term memories
+            if (extractedMemories.short_term.length > 0) {
+              console.log(`💾 Saving ${extractedMemories.short_term.length} short-term memories...`);
+              for (const memory of extractedMemories.short_term) {
+                const { error } = await supabaseAdmin.from('short_term_memory').insert({
+                  user_id: userId,
+                  thread_id: threadId,
+                  message: memory.display,
+                  display_text: memory.display,
+                  sender: 'system',
+                  tags: memory.tags || ['auto-captured'],
+                  timestamp: new Date().toISOString(),
+                  metadata: { auto_captured: true }
+                });
+                if (error) {
+                  console.error('❌ Short-term memory save error:', error);
+                }
+              }
+            }
+
+            // Save long-term memories with embeddings
+            if (extractedMemories.long_term.length > 0) {
+              console.log(`💾 Saving ${extractedMemories.long_term.length} long-term memories...`);
+              for (const memory of extractedMemories.long_term) {
+                const embedding = await generateEmbedding(memory.value, apiKey);
+                
+                const { error } = await supabaseAdmin.from('long_term_memory').insert({
+                  user_id: userId,
+                  category: memory.category,
+                  key: memory.key,
+                  value: memory.value,
+                  display_text: memory.display,
+                  importance: memory.importance,
+                  embedding: embedding,
+                  metadata: { auto_captured: true }
+                });
+                if (error) {
+                  console.error('❌ Long-term memory save error:', error);
+                }
+              }
+            }
+
+            // Send memory update notification
+            res.write(`data: ${JSON.stringify({ 
+              type: 'memory_update',
+              memories: extractedMemories 
+            })}\n\n`);
+          } else {
+            console.log('⚠️ Skipping memory extraction - missing userId or threadId');
+          }
+
         } catch (error) {
           console.error("OpenAI API error:", error);
           assistantMessage = "I'm sorry, I'm experiencing technical difficulties. Please try again later.";
@@ -129,10 +332,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Chat endpoint
+  // Keep your existing non-streaming endpoint with memory support
   app.post("/api/chat", async (req, res) => {
     try {
-      const { message, apiKey, model } = chatRequestSchema.parse(req.body);
+      const { message, apiKey, model, userId, threadId } = req.body;
+      const parsedData = chatRequestSchema.parse({ message, apiKey, model });
 
       // Store user message
       await storage.createMessage({
@@ -140,65 +344,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "user"
       });
 
+      // Fetch memories if userId and threadId provided
+      let memoryContext = '';
+      if (userId && threadId) {
+        const { shortTermMemories, longTermMemories } = await fetchMemories(userId, threadId, message, apiKey);
+        memoryContext = buildMemoryContext(shortTermMemories, longTermMemories);
+      }
+
       let assistantMessage: string;
 
-      // Use client-provided API key or fallback to server environment variable
       const activeApiKey = apiKey || process.env.OPENAI_API_KEY;
-      const activeModel = model || "gpt-4o";
+      const activeModel = model || "o4-mini";
 
-      // Check if we have a real API key
       if (activeApiKey && activeApiKey !== "demo_key") {
         try {
-          // Add a 2-3 second thinking delay
           await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
-          // Create OpenAI client with user's API key
-          const userOpenai = new OpenAI({
-            apiKey: activeApiKey,
-          });
+          const userOpenai = new OpenAI({ apiKey: activeApiKey });
 
-          const response = await userOpenai.responses.create({
+          // Enhanced system prompt with memory context
+          const systemContent = memoryContext 
+            ? `You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.\n\nContext from memory:\n${memoryContext}`
+            : "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses.";
+
+          const response = await userOpenai.chat.completions.create({
             model: activeModel,
-            input: [
+            messages: [
               {
-                "role": "system",
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": "You are a helpful AI assistant. Provide clear, concise, and helpful responses. You can use markdown formatting in your responses."
-                  }
-                ]
+                role: "system",
+                content: systemContent
               },
               {
-                "role": "user", 
-                "content": [
-                  {
-                    "type": "input_text",
-                    "text": message
-                  }
-                ]
+                role: "user",
+                content: message
               }
             ],
-            text: {
-              "format": {
-                "type": "text"
-              }
-            },
-            reasoning: {},
-            tools: [],
             temperature: 0.7,
-            max_output_tokens: 1000,
-            top_p: 1,
-            store: true
+            max_completion_tokens: 1000,
+            top_p: 1
           });
 
-          assistantMessage = response.output_text || "I apologize, but I couldn't generate a response.";
+          assistantMessage = response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response.";
+
+          // Extract and save memories if userId/threadId provided
+          if (userId && threadId) {
+            const extractedMemories = await extractMemories(message, assistantMessage, apiKey);
+
+            // Save memories (same logic as streaming endpoint)
+            for (const memory of extractedMemories.short_term) {
+              await supabaseAdmin.from('short_term_memory').insert({
+                user_id: userId,
+                thread_id: threadId,
+                message: memory.display,
+                display_text: memory.display,
+                sender: 'system',
+                tags: memory.tags || ['auto-captured'],
+                timestamp: new Date().toISOString(),
+                metadata: { auto_captured: true }
+              });
+            }
+
+            for (const memory of extractedMemories.long_term) {
+              const embedding = await generateEmbedding(memory.value, apiKey);
+              
+              await supabaseAdmin.from('long_term_memory').insert({
+                user_id: userId,
+                category: memory.category,
+                key: memory.key,
+                value: memory.value,
+                display_text: memory.display,
+                importance: memory.importance,
+                embedding: embedding,
+                metadata: { auto_captured: true }
+              });
+            }
+          }
+
         } catch (error) {
           console.error("OpenAI API error:", error);
           assistantMessage = "I'm sorry, I'm experiencing technical difficulties. Please try again later.";
         }
       } else {
-        // Mock response for demo/development
         assistantMessage = generateMockResponse(message);
       }
 
@@ -222,7 +448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get chat history
+  // Keep your existing messages endpoint
   app.get("/api/messages", async (req, res) => {
     try {
       const messages = await storage.getMessages();
@@ -233,24 +459,278 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Memory API endpoints - ALL UPDATED TO USE supabaseAdmin
+  
+  // Get short term memories for user
+  app.get("/api/memory/short-term", async (req, res) => {
+    try {
+      const { user_id } = req.query;
+      
+      if (!user_id) {
+        return res.status(400).json({ error: "user_id is required" });
+      }
+      
+      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('short_term_memory')
+        .select('*')
+        .eq('user_id', user_id)
+        .order('timestamp', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching short-term memories:', error);
+        return res.status(500).json({ error: "Failed to fetch memories" });
+      }
+      
+      // Ensure display_text exists
+      const processedData = (data || []).map((memory: any) => ({
+        ...memory,
+        display_text: memory.display_text || memory.message || ''
+      }));
+      
+      res.json(processedData);
+    } catch (error) {
+      console.error("Short-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Get long term memories for user
+  app.get("/api/memory/long-term", async (req, res) => {
+    try {
+      const { user_id } = req.query;
+      
+      if (!user_id) {
+        return res.status(400).json({ error: "user_id is required" });
+      }
+      
+      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('long_term_memory')
+        .select('*')
+        .eq('user_id', user_id)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching long-term memories:', error);
+        return res.status(500).json({ error: "Failed to fetch memories" });
+      }
+      
+      res.json(data || []);
+    } catch (error) {
+      console.error("Long-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Add new short term memory
+  app.post("/api/memory/short-term", async (req, res) => {
+    try {
+      const { user_id, display_text, thread_id } = req.body;
+      
+      if (!user_id || !display_text) {
+        return res.status(400).json({ error: "user_id and display_text are required" });
+      }
+      
+      const newMemory = {
+        user_id,
+        thread_id: thread_id || nanoid(), // Use provided thread_id or generate new one
+        message: display_text,
+        display_text: display_text,
+        sender: 'user',
+        tags: ['user-created'],
+        timestamp: new Date().toISOString(),
+        metadata: { auto_captured: false }
+      };
+      
+      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('short_term_memory')
+        .insert(newMemory)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error creating short-term memory:', error);
+        return res.status(500).json({ 
+          error: "Failed to create memory",
+          details: error.message
+        });
+      }
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Create short-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Add new long term memory
+  app.post("/api/memory/long-term", async (req, res) => {
+    try {
+      const { user_id, display_text } = req.body;
+      
+      if (!user_id || !display_text) {
+        return res.status(400).json({ error: "user_id and display_text are required" });
+      }
+      
+      // Generate key/value from display_text
+      const key = display_text.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 50);
+      const value = display_text;
+      
+      // Generate embedding for the value
+      const embedding = await generateEmbedding(value);
+      
+      const newMemory = {
+        user_id,
+        category: 'personal',
+        key,
+        value,
+        display_text,
+        importance: 3,
+        embedding,
+        metadata: { auto_captured: false }
+      };
+      
+      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('long_term_memory')
+        .insert(newMemory)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error creating long-term memory:', error);
+        return res.status(500).json({ error: "Failed to create memory" });
+      }
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Create long-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Update short term memory
+  app.put("/api/memory/short-term/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { display_text } = req.body;
+      
+      if (!display_text) {
+        return res.status(400).json({ error: "display_text is required" });
+      }
+      
+      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('short_term_memory')
+        .update({ 
+          message: display_text,
+          display_text: display_text
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating short-term memory:', error);
+        return res.status(500).json({ error: "Failed to update memory" });
+      }
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Update short-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Update long term memory
+  app.put("/api/memory/long-term/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { display_text } = req.body;
+      
+      if (!display_text) {
+        return res.status(400).json({ error: "display_text is required" });
+      }
+      
+      const { data, error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('long_term_memory')
+        .update({ 
+          display_text,
+          last_updated: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating long-term memory:', error);
+        return res.status(500).json({ error: "Failed to update memory" });
+      }
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Update long-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Delete short term memory
+  app.delete("/api/memory/short-term/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const { error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('short_term_memory')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting short-term memory:', error);
+        return res.status(500).json({ error: "Failed to delete memory" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete short-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // Delete long term memory
+  app.delete("/api/memory/long-term/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const { error } = await supabaseAdmin  // FIXED: Changed from supabase
+        .from('long_term_memory')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting long-term memory:', error);
+        return res.status(500).json({ error: "Failed to delete memory" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete long-term memory endpoint error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
 
+// Keep your existing generateMockResponse function
 function generateMockResponse(prompt: string): string {
   const lowerPrompt = prompt.toLowerCase();
   
-  // Handle common greetings
   if (lowerPrompt.includes("hello") || lowerPrompt.includes("hi")) {
     return "Hello! I'm your AI assistant. How can I help you today?";
   }
   
-  // Handle help requests
   if (lowerPrompt.includes("help")) {
     return "I'm here to help! You can ask me questions about various topics, request explanations, help with coding, writing, math problems, and much more. What would you like to know?";
   }
   
-  // Handle coding questions
   if (lowerPrompt.includes("code") || lowerPrompt.includes("programming")) {
     return `I'd be happy to help with coding! Here's a simple example:
 
@@ -265,7 +745,6 @@ console.log(greet("World"));
 What specific programming topic would you like help with?`;
   }
   
-  // Handle machine learning questions
   if (lowerPrompt.includes("machine learning") || lowerPrompt.includes("ml")) {
     return `**Machine Learning** is a subset of artificial intelligence (AI) that enables computers to learn and improve from experience without being explicitly programmed.
 
@@ -278,7 +757,6 @@ Here are the key concepts:
 Would you like me to explain any specific aspect of machine learning?`;
   }
   
-  // Default responses
   const responses = [
     "That's an interesting question! I'd be happy to help you explore this topic further. Could you provide more specific details about what you'd like to know?",
     "I understand you're looking for information about that. Here are some key points to consider:\n\n• Context is important when addressing this question\n• There are multiple perspectives to consider\n• The best approach depends on your specific needs\n\nWould you like me to elaborate on any particular aspect?",

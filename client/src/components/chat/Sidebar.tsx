@@ -1,13 +1,22 @@
-import { Search, X, Menu, MessageSquare, Folder, Plus, Sun, Moon, MoreHorizontal, Trash2, Brain, Settings, Home } from "lucide-react";
+import { Search, X, Menu, MessageSquare, Folder, Plus, Sun, Moon, MoreHorizontal, Trash2, Brain, Settings, Home, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useState, useEffect } from "react";
-import { loadThreads, getActiveThreadId, deleteThread, type ChatThread } from "@/lib/chatThreads";
 import { isYesterday } from "date-fns";
 import { useLocation } from "wouter";
 import { useTheme } from "@/lib/theme";
 import { useAuth } from "@/lib/use-auth";
+
+interface ChatThread {
+  id: string;
+  user_id: string;
+  thread_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
+  metadata: any;
+}
 
 interface SidebarProps {
   isOpen: boolean;
@@ -16,10 +25,10 @@ interface SidebarProps {
   onNewChat: () => void;
   activeThreadId: string | null;
   onThreadDelete?: (threadId: string) => void;
+  threads: ChatThread[];  // Now passed from parent
 }
 
-export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThreadId, onThreadDelete }: SidebarProps) {
-  const [threads, setThreads] = useState<ChatThread[]>([]);
+export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThreadId, onThreadDelete, threads }: SidebarProps) {
   const [location, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { user, profile, authEnabled } = useAuth();
@@ -39,41 +48,25 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
     return (firstInitial + lastInitial).toUpperCase() || "U";
   };
 
-  useEffect(() => {
-    const loadedThreads = loadThreads();
-    setThreads(loadedThreads);
-  }, []);
-
-  // Update threads when activeThreadId changes (thread was updated)
-  useEffect(() => {
-    const loadedThreads = loadThreads();
-    setThreads(loadedThreads);
-  }, [activeThreadId]);
-
-  // Add a periodic refresh to catch new threads
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const loadedThreads = loadThreads();
-      setThreads(loadedThreads);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Categorize threads by time
-  const yesterdayThreads = threads.filter(thread => isYesterday(thread.updatedAt));
-  const recentThreads = threads.filter(thread => !isYesterday(thread.updatedAt));
+  // Categorize threads by time - handle case when threads is undefined
+  const yesterdayThreads = (threads || []).filter(thread => {
+    const threadDate = new Date(thread.updated_at);
+    return isYesterday(threadDate);
+  });
+  
+  const recentThreads = (threads || []).filter(thread => {
+    const threadDate = new Date(thread.updated_at);
+    return !isYesterday(threadDate);
+  });
 
   const handleDeleteThread = (threadId: string) => {
-    deleteThread(threadId);
-    setThreads(loadThreads());
     if (onThreadDelete) {
       onThreadDelete(threadId);
     }
   };
 
   const renderThreadItem = (thread: ChatThread) => {
-    const isActive = thread.id === activeThreadId;
+    const isActive = thread.thread_id === activeThreadId;
     
     return (
       <div 
@@ -85,7 +78,7 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
         }`}
       >
         <button 
-          onClick={() => onThreadSelect(thread.id)}
+          onClick={() => onThreadSelect(thread.thread_id)}
           className="w-full text-left truncate font-normal pr-8"
         >
           {thread.title}
@@ -108,7 +101,7 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
               <DropdownMenuItem 
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteThread(thread.id);
+                  handleDeleteThread(thread.thread_id);
                 }}
                 className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
               >
@@ -160,33 +153,16 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
 
           {/* Search chats */}
           <div className="px-3 pb-3">
-            <button className="w-full justify-start text-[#666666] dark:text-white hover:text-black dark:hover:text-white h-8 flex items-center transition-colors">
-              <Search className="w-4 h-4 mr-2" />
-              Search chats
-            </button>
-          </div>
-
-          {/* Navigation */}
-          <div className="px-3 pb-4 border-b border-gray-300 dark:border-gray-600">
-            <div className="space-y-1">
-              <button 
-                onClick={() => setLocation("/memory")}
-                className={`w-full justify-start h-8 flex items-center transition-colors rounded px-2
-                  ${location === "/memory" ? "bg-gray-200 dark:bg-gray-700 text-black dark:text-white" : "text-[#666666] dark:text-white hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#435058]"}`}
-              >
-                <Brain className="w-4 h-4 mr-2" />
-                Memories
-              </button>
-              <button 
-                onClick={() => setLocation("/settings")}
-                className={`w-full justify-start h-8 flex items-center transition-colors rounded px-2
-                  ${location === "/settings" ? "bg-gray-200 dark:bg-gray-700 text-black dark:text-white" : "text-[#666666] dark:text-white hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#435058]"}`}
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </button>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#666666] dark:text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search"
+                className="w-full h-8 pl-9 pr-3 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-black dark:text-white placeholder-[#666666] dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 focus:border-gray-300 dark:focus:border-gray-600 transition-colors"
+              />
             </div>
           </div>
+
 
           {/* Chat History */}
           <ScrollArea className="flex-1 px-3">
@@ -215,36 +191,48 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
           <div className="p-3 border-t border-gray-300 dark:border-gray-600">
             <div className="flex items-center justify-between">
               {authEnabled && user ? (
-                <button 
-                  onClick={() => setLocation("/settings")}
-                  className="flex items-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-800 rounded p-1 transition-colors"
-                >
+                <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
                     {getUserInitials()}
                   </div>
                   <span className="text-sm text-[#666666] dark:text-white">
                     {getFirstName() || "User"}
                   </span>
-                </button>
+                </div>
               ) : (
-                <button 
-                  onClick={() => setLocation("/settings")}
-                  className="flex items-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-800 rounded p-1 transition-colors"
-                >
+                <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black text-sm font-medium">
                     U
                   </div>
                   <span className="text-sm text-[#666666] dark:text-white">User</span>
-                </button>
+                </div>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleTheme}
-                className="p-2 text-[#666666] hover:text-black dark:text-white dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-800"
-              >
-                {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleTheme}
+                  className="p-2 text-[#666666] hover:text-black dark:text-white dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-800"
+                >
+                  {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation("/memory")}
+                  className="p-2 text-[#666666] hover:text-black dark:text-white dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-800"
+                >
+                  <Brain className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation("/settings")}
+                  className="p-2 text-[#666666] hover:text-black dark:text-white dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-800"
+                >
+                  <Settings className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
           </div>

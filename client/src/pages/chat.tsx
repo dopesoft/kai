@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/chat/Header";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { MessageContainer } from "@/components/chat/MessageContainer";
@@ -11,22 +11,26 @@ import { AuthSetupBanner } from "@/components/auth/AuthSetupBanner";
 import { useAuth } from "@/lib/use-auth";
 import type { Message, ChatRequest } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  loadThreads, 
-  getActiveThreadId, 
-  setActiveThreadId, 
-  createNewThread, 
-  addMessageToThread, 
-  getThread,
-  saveNewThreadWithMessage,
-  type ChatThread 
-} from "@/lib/chatThreads";
+import { nanoid } from 'nanoid';
+
+// Define chat thread type
+interface ChatThread {
+  id: string;
+  user_id: string;
+  thread_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
+  metadata: any;
+  messages?: Message[];
+}
 
 export default function Chat() {
-  const { authEnabled } = useAuth();
+  const { authEnabled, user } = useAuth();
   const [isTyping, setIsTyping] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeThreadId, setActiveThreadIdState] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [currentMessages, setCurrentMessages] = useState<Message[]>([]);
   const [currentThread, setCurrentThread] = useState<ChatThread | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>("");
@@ -34,66 +38,146 @@ export default function Chat() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Initialize thread state
+  // Fetch threads from database
+  const { data: threads = [], refetch: refetchThreads } = useQuery({
+    queryKey: ['threads', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const response = await fetch(`/api/chat/threads?user_id=${user.id}`);
+      if (!response.ok) throw new Error('Failed to fetch threads');
+      return response.json();
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch messages when thread changes
   useEffect(() => {
-    const storedActiveId = getActiveThreadId();
-    if (storedActiveId) {
-      const thread = getThread(storedActiveId);
-      if (thread) {
-        setActiveThreadIdState(storedActiveId);
-        setCurrentMessages(thread.messages);
-        setCurrentThread(thread);
-      } else {
-        // Thread not found, start with no active thread
-        setActiveThreadIdState(null);
-        setCurrentMessages([]);
-        setCurrentThread(null);
-        setActiveThreadId(null);
-      }
+    if (activeThreadId && user?.id) {
+      fetchThreadMessages(activeThreadId);
     } else {
-      // No active thread, start fresh
-      setActiveThreadIdState(null);
       setCurrentMessages([]);
       setCurrentThread(null);
     }
-  }, []);
+  }, [activeThreadId, user?.id]);
+
+  const fetchThreadMessages = async (threadId: string) => {
+    try {
+      const response = await fetch(`/api/chat/threads/${threadId}?user_id=${user?.id}`);
+      if (!response.ok) throw new Error('Failed to fetch thread');
+      const threadData = await response.json();
+      
+      setCurrentThread(threadData);
+      setCurrentMessages(threadData.messages.map((msg: any) => ({
+        id: msg.id,
+        content: msg.content,
+        role: msg.role,
+        timestamp: new Date(msg.created_at)
+      })));
+    } catch (error) {
+      console.error('Failed to fetch thread messages:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load conversation history",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const createThreadMutation = useMutation({
+    mutationFn: async (title: string) => {
+      const threadId = nanoid();
+      const response = await fetch('/api/chat/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user?.id,
+          thread_id: threadId,
+          title
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to create thread');
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchThreads();
+    }
+  });
+
+  const deleteThreadMutation = useMutation({
+    mutationFn: async (threadId: string) => {
+      const response = await fetch(`/api/chat/threads/${threadId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) throw new Error('Failed to delete thread');
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchThreads();
+    }
+  });
 
   const handleNewChat = () => {
-    // Create a temporary thread that won't be saved until first message
-    const newThread = createNewThread();
-    setCurrentThread(newThread);
-    setActiveThreadIdState(newThread.id);
+    // Clear everything and show welcome screen
+    setCurrentThread(null);
+    setActiveThreadId(null);
     setCurrentMessages([]);
+    
+    // Clear active thread from localStorage (temporary state only)
+    localStorage.removeItem('activeThreadId');
   };
 
   const handleThreadSelect = (threadId: string) => {
-    const thread = getThread(threadId);
-    if (thread) {
-      setActiveThreadId(threadId);
-      setActiveThreadIdState(threadId);
-      setCurrentMessages(thread.messages);
-      setCurrentThread(thread);
+    setActiveThreadId(threadId);
+    // Store in localStorage for page refresh persistence
+    localStorage.setItem('activeThreadId', threadId);
+  };
+
+  const handleThreadDelete = async (threadId: string) => {
+    try {
+      await deleteThreadMutation.mutateAsync(threadId);
+      
+      if (threadId === activeThreadId) {
+        // If we deleted the active thread, start fresh
+        handleNewChat();
+      }
+      
+      toast({
+        title: "Success",
+        description: "Conversation deleted",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete conversation",
+        variant: "destructive",
+      });
     }
   };
 
-  const handleThreadDelete = (threadId: string) => {
-    if (threadId === activeThreadId) {
-      // If we deleted the active thread, start fresh
-      setActiveThreadIdState(null);
-      setCurrentMessages([]);
-      setCurrentThread(null);
-      setActiveThreadId(null);
+  // Restore active thread on mount (from localStorage)
+  useEffect(() => {
+    const storedThreadId = localStorage.getItem('activeThreadId');
+    if (storedThreadId && user?.id) {
+      setActiveThreadId(storedThreadId);
     }
-  };
+  }, [user?.id]);
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
       // If no active thread, create a new one
       let threadToUse = currentThread;
       if (!threadToUse) {
-        threadToUse = createNewThread();
+        // Generate title from first message
+        const words = message.split(' ').slice(0, 4);
+        const title = words.join(' ') + (message.split(' ').length > 4 ? '...' : '');
+        
+        // Create thread in database
+        threadToUse = await createThreadMutation.mutateAsync(title);
         setCurrentThread(threadToUse);
-        setActiveThreadIdState(threadToUse.id);
+        setActiveThreadId(threadToUse.thread_id);
+        localStorage.setItem('activeThreadId', threadToUse.thread_id);
       }
 
       // Check for verified integrations
@@ -107,7 +191,7 @@ export default function Chat() {
       const apiKey = localStorage.getItem("chatgpt_api_key") || undefined;
       const model = localStorage.getItem("chatgpt_model") || undefined;
       
-      // Add user message to thread immediately
+      // Add user message to UI immediately
       const userMessage: Message = {
         id: Date.now(),
         content: message,
@@ -115,29 +199,14 @@ export default function Chat() {
         timestamp: new Date()
       };
       
-      // If this is the first message in a new thread, save the thread to storage
-      const isFirstMessage = threadToUse.messages.length === 0;
-      if (isFirstMessage) {
-        // Update thread with first message and save to storage
-        threadToUse.messages.push(userMessage);
-        threadToUse.updatedAt = new Date();
-        // Generate a title from the first few words of the message
-        const words = message.split(' ').slice(0, 4);
-        threadToUse.title = words.join(' ') + (message.split(' ').length > 4 ? '...' : '');
-        
-        saveNewThreadWithMessage(threadToUse);
-        setCurrentThread(threadToUse);
-      } else {
-        // Add to existing thread
-        addMessageToThread(threadToUse.id, userMessage);
-      }
-      
       setCurrentMessages(prev => [...prev, userMessage]);
       
       const requestData: ChatRequest = { 
         message,
         apiKey,
-        model
+        model,
+        userId: user?.id,
+        threadId: threadToUse.thread_id
       };
 
       // Use streaming endpoint
@@ -176,11 +245,30 @@ export default function Chat() {
                 if (data.error) {
                   throw new Error(data.error);
                 }
-                if (data.content) {
+                
+                // Handle memory updates
+                if (data.type === 'memory_update') {
+                  console.log('📝 Memory saved:', data.memories);
+                  // Show a toast notification for memory updates
+                  const shortTermCount = data.memories.short_term?.length || 0;
+                  const longTermCount = data.memories.long_term?.length || 0;
+                  const totalCount = shortTermCount + longTermCount;
+                  
+                  if (totalCount > 0) {
+                    toast({
+                      title: "Memory Updated",
+                      description: `Saved ${totalCount} memory item${totalCount > 1 ? 's' : ''}`,
+                    });
+                  }
+                } else if (data.type === 'thread_info') {
+                  // Server might send OpenAI thread ID if using assistants
+                  console.log('OpenAI Thread ID:', data.threadId);
+                } else if (data.content) {
                   streamedContent += data.content;
                   // Update streaming content in real-time for smooth streaming effect
                   setStreamingContent(streamedContent);
                 }
+                
                 if (data.done) {
                   // End streaming mode and add final message
                   setIsStreaming(false);
@@ -193,8 +281,10 @@ export default function Chat() {
                     timestamp: new Date()
                   };
                   
-                  addMessageToThread(threadToUse.id, assistantMessage);
                   setCurrentMessages(prev => [...prev, assistantMessage]);
+                  
+                  // Update thread's updated_at timestamp
+                  queryClient.invalidateQueries({ queryKey: ['threads', user?.id] });
                   
                   return { content: streamedContent, role: "assistant" as const };
                 }
@@ -260,6 +350,7 @@ export default function Chat() {
         onNewChat={handleNewChat}
         activeThreadId={activeThreadId}
         onThreadDelete={handleThreadDelete}
+        threads={threads}
       />
       
       <div className="flex-1 flex flex-col min-w-0 relative z-10">

@@ -1,3 +1,32 @@
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Get __dirname equivalent for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env from server directory
+const serverEnvPath = join(__dirname, '.env');
+
+console.log('🔍 Loading environment variables...');
+console.log('📁 Server .env path:', serverEnvPath);
+const serverResult = dotenv.config({ path: serverEnvPath });
+if (serverResult.error) {
+  console.log('❌ Server .env not found or error:', serverResult.error.message);
+  console.log('⚠️  Please create a .env file in the server/ directory');
+} else {
+  console.log('✅ Server .env loaded successfully');
+}
+
+// Check if environment variables are loaded
+console.log('🔍 Environment variables check:');
+console.log('- SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ Set' : '❌ Not set');
+console.log('- SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Set' : '❌ Not set');
+console.log('- OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '✅ Set' : '❌ Not set');
+console.log('- PORT:', process.env.PORT || 'Not set (will use 8000)');
+
+// Rest of your imports...
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";

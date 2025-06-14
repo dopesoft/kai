@@ -8,13 +8,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { WavyBackground } from "@/components/ui/wavy-background";
-import { SparklesCore } from "@/components/ui/sparkles";
+import { SparklesBackground } from "@/components/ui/sparkles-background";
+import { AuthSetupBanner } from "@/components/auth/AuthSetupBanner";
+import { Header } from "@/components/chat/Header";
+import { Sidebar } from "@/components/chat/Sidebar";
 import { useAuth } from "@/lib/use-auth";
 
 // Add interface for integration type
@@ -35,6 +37,9 @@ export default function Settings() {
   const { user, profile, signOut, updateProfile, refreshProfile, loading, authEnabled, session } = useAuth();
   
   const [activeTab, setActiveTab] = useState("profile");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeThreadId] = useState<string | null>(null);
+  const threads: any[] = [];
   
   // Original profile form data - keeping the existing fields
   const [firstName, setFirstName] = useState("");
@@ -46,7 +51,7 @@ export default function Settings() {
   
   // Legacy integration states
   const [chatgptKey, setChatgptKey] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gpt-4o");
+  const [selectedModel, setSelectedModel] = useState("o4-mini");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"CALENDAR" | "MAIL" | "AI">("CALENDAR");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -58,6 +63,15 @@ export default function Settings() {
     email: "",
     model: "",
     calendarUrl: ""
+  });
+  
+  // Track original profile values to detect changes
+  const [originalProfile, setOriginalProfile] = useState({
+    firstName: "",
+    lastName: "",
+    username: "",
+    website: "",
+    biography: ""
   });
 
   // Get real integrations based on what's actually configured and tested
@@ -79,8 +93,8 @@ export default function Settings() {
       // Map Supabase profile to existing form fields
       const fullName = profile.full_name || "";
       const nameParts = fullName.split(" ");
-      setFirstName(nameParts[0] || "");
-      setLastName(nameParts.slice(1).join(" ") || "");
+      const firstNameValue = nameParts[0] || "";
+      const lastNameValue = nameParts.slice(1).join(" ") || "";
       
       // Use kai_persona for biography if it's a string, otherwise use description field
       let bioText = "";
@@ -91,13 +105,25 @@ export default function Settings() {
           bioText = profile.kai_persona.description;
         }
       }
+      
+      const websiteValue = profile.profile_image_url || "";
+      const usernameValue = user?.email?.split("@")[0] || "";
+      
+      // Set current values
+      setFirstName(firstNameValue);
+      setLastName(lastNameValue);
       setBiography(bioText);
+      setWebsite(websiteValue);
+      setUsername(usernameValue);
       
-      // Set website from profile_image_url for now (or we could add a separate website field to DB)
-      setWebsite(profile.profile_image_url || "");
-      
-      // Username could be derived from email
-      setUsername(user?.email?.split("@")[0] || "");
+      // Store original values
+      setOriginalProfile({
+        firstName: firstNameValue,
+        lastName: lastNameValue,
+        username: usernameValue,
+        website: websiteValue,
+        biography: bioText
+      });
     }
   }, [profile, user]);
 
@@ -182,7 +208,7 @@ export default function Settings() {
         body: JSON.stringify({
           model: model,
           messages: [{ role: 'user', content: 'Test connection' }],
-          max_tokens: 10
+          max_completion_tokens: 10
         })
       });
 
@@ -243,7 +269,7 @@ export default function Settings() {
     let isConnected = false;
     
     if (provider === "openai") {
-      isConnected = await testOpenAIConnection(apiKey, model || "gpt-4o");
+      isConnected = await testOpenAIConnection(apiKey, model || "o4-mini");
     } else if (provider === "claude") {
       isConnected = await testClaudeConnection(apiKey, model || "claude-3-5-sonnet-20241022");
     } else if (provider === "gemini") {
@@ -277,9 +303,9 @@ export default function Settings() {
       // Save API keys and model for the specific provider
       if (provider === "openai") {
         localStorage.setItem("chatgpt_api_key", apiKey);
-        localStorage.setItem("chatgpt_model", model || "gpt-4o");
+        localStorage.setItem("chatgpt_model", model || "o4-mini");
         setChatgptKey(apiKey);
-        setSelectedModel(model || "gpt-4o");
+        setSelectedModel(model || "o4-mini");
       } else if (provider === "claude") {
         localStorage.setItem("claude_api_key", apiKey);
         localStorage.setItem("claude_model", model || "claude-3-5-sonnet-20241022");
@@ -316,7 +342,7 @@ export default function Settings() {
       localStorage.removeItem("chatgpt_api_key");
       localStorage.removeItem("chatgpt_model");
       setChatgptKey("");
-      setSelectedModel("gpt-4o");
+      setSelectedModel("o4-mini");
     }
     
     toast({
@@ -350,6 +376,15 @@ export default function Settings() {
   const characterCount = biography.length;
   const maxCharacters = 160;
   const charactersLeft = maxCharacters - characterCount;
+  
+  // Check if profile has been modified
+  const hasProfileChanged = () => {
+    return firstName !== originalProfile.firstName ||
+           lastName !== originalProfile.lastName ||
+           username !== originalProfile.username ||
+           website !== originalProfile.website ||
+           biography !== originalProfile.biography;
+  };
 
   // Helper functions
   const groupIntegrationsByType = () => {
@@ -410,20 +445,20 @@ export default function Settings() {
   };
 
   const renderIntegrationCard = (integration: Integration) => (
-    <Card key={integration.id} className="bg-white dark:bg-black border-gray-300 dark:border-white hover:shadow-md transition-shadow">
+    <Card key={integration.id} className="bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
-            <h3 className="font-medium text-gray-900 dark:text-white mb-1">{integration.name}</h3>
+            <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-1">{integration.name}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">{integration.account}</p>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-white dark:bg-black border-gray-300 dark:border-white">
+            <DropdownMenuContent align="end" className="bg-white dark:bg-black border-gray-200 dark:border-gray-700">
               <DropdownMenuItem 
                 className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
                 onClick={() => handleEditIntegration(integration)}
@@ -457,7 +492,7 @@ export default function Settings() {
 
   const renderAddIntegrationCard = (type: "CALENDAR" | "MAIL" | "AI") => (
     <Card 
-      className="bg-white dark:bg-black border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 transition-colors cursor-pointer"
+      className="bg-gray-50 dark:bg-gray-900 border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 transition-colors cursor-pointer"
       onClick={() => handleAddIntegration(type)}
     >
       <CardContent className="p-4 flex items-center justify-center min-h-[120px]">
@@ -477,191 +512,111 @@ export default function Settings() {
     return (firstInitial + lastInitial).toUpperCase() || "U";
   };
 
+  // Sidebar toggle
+  const toggleSidebar = () => setIsSidebarOpen((v) => !v);
+
+  // Navigation functions for sidebar
+  const handleThreadSelect = (threadId: string) => {
+    localStorage.setItem('activeThreadId', threadId);
+    setLocation('/'); // Navigate to chat page
+  };
+
+  const handleNewChat = () => {
+    localStorage.removeItem('activeThreadId');
+    setLocation('/'); // Navigate to chat page with new thread
+  };
+
   return (
-    <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4 relative">
-      {/* Sparkles Background */}
-      <div className="absolute inset-0 z-0">
-        <SparklesCore
-          background="transparent"
-          minSize={0.4}
-          maxSize={1}
-          particleDensity={120}
-          className="w-full h-full"
-          particleColor="#000000"
-        />
-        <div className="dark:block hidden absolute inset-0">
-          <SparklesCore
-            background="transparent"
-            minSize={0.4}
-            maxSize={1}
-            particleDensity={120}
-            className="w-full h-full"
-            particleColor="#ffffff"
-          />
-        </div>
+    <div className="h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100 relative overflow-hidden flex flex-col">
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <SparklesBackground />
       </div>
-      
-      <div className="bg-white dark:bg-black border-2 border-black dark:border-white rounded-lg shadow-xl w-full max-w-6xl mx-auto relative z-10">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* Header with Tabs / Mobile Dropdown */}
-          <div className="border-b border-gray-200 dark:border-white p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Settings</h2>
-              
-              {/* Desktop Tabs */}
-              {!isMobile && (
-                <div className="absolute left-1/2 transform -translate-x-1/2">
-                  <TabsList className="grid grid-cols-3 bg-gray-100 dark:bg-white">
-                    <TabsTrigger 
-                      value="profile" 
-                      className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-black dark:data-[state=active]:bg-black dark:data-[state=active]:text-white dark:text-black text-sm px-3 py-1"
-                    >
-                      <Check className="w-3 h-3" />
-                      Profile
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="integrations" 
-                      className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-black dark:data-[state=active]:bg-black dark:data-[state=active]:text-white dark:text-black text-sm px-3 py-1"
-                    >
-                      <Database className="w-3 h-3" />
-                      Integrations
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="settings" 
-                      className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-black dark:data-[state=active]:bg-black dark:data-[state=active]:text-white dark:text-black text-sm px-3 py-1"
-                    >
-                      <Cloud className="w-3 h-3" />
-                      Settings
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-              )}
+      {authEnabled === false && (
+        <div className="fixed top-0 left-0 right-0 z-50 p-4">
+          <AuthSetupBanner />
+        </div>
+      )}
+      {/* Header at the very top */}
+      <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} onNewChat={handleNewChat} />
+      {/* Main area: sidebar and content side by side */}
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar */}
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          onClose={toggleSidebar}
+          onThreadSelect={handleThreadSelect}
+          onNewChat={handleNewChat}
+          activeThreadId={activeThreadId}
+          threads={threads}
+        />
+        {/* Main content, centered horizontally */}
+        <div className="flex-1 flex justify-center items-start min-h-0">
+          <div className="max-w-[1100px] w-full bg-white dark:bg-black backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-8 h-[calc(80vh+16px)] flex flex-col min-h-0 mt-[105px]">
+            <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">Settings</h1>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 !m-0 !p-0">
+              <div className="mb-6 flex items-center justify-between">
+                <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-gray-100 dark:bg-gray-800 p-1 text-gray-600 dark:text-gray-400 w-fit">
+                  <TabsTrigger value="profile" className="w-[120px] justify-center bg-transparent hover:bg-gray-200 dark:hover:bg-gray-700 data-[state=active]:bg-white dark:data-[state=active]:bg-black text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 border-0 data-[state=active]:shadow-sm">Profile</TabsTrigger>
+                  <TabsTrigger value="integrations" className="w-[120px] justify-center bg-transparent hover:bg-gray-200 dark:hover:bg-gray-700 data-[state=active]:bg-white dark:data-[state=active]:bg-black text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 border-0 data-[state=active]:shadow-sm">Integrations</TabsTrigger>
+                  <TabsTrigger value="settings" className="w-[120px] justify-center bg-transparent hover:bg-gray-200 dark:hover:bg-gray-700 data-[state=active]:bg-white dark:data-[state=active]:bg-black text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 border-0 data-[state=active]:shadow-sm">Settings</TabsTrigger>
+                </TabsList>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-2 bg-white dark:bg-black border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 text-gray-700 dark:text-gray-300"
+                  onClick={handleClose}
+                >
+                  <X className="w-4 h-4" />
+                  Close
+                </Button>
+              </div>
 
-              {/* Mobile Dropdown */}
-              {isMobile && (
-                <div className="absolute left-1/2 transform -translate-x-1/2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="flex items-center gap-2 bg-gray-100 dark:bg-white border-gray-300 dark:border-white text-black dark:text-black px-4 py-2">
-                        {activeTab === "profile" && (
-                          <>
-                            <Check className="w-3 h-3" />
-                            Profile
-                          </>
-                        )}
-                        {activeTab === "integrations" && (
-                          <>
-                            <Database className="w-3 h-3" />
-                            Integrations
-                          </>
-                        )}
-                        {activeTab === "settings" && (
-                          <>
-                            <Cloud className="w-3 h-3" />
-                            Settings
-                          </>
-                        )}
-                        <ChevronDown className="w-3 h-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="center" className="bg-white dark:bg-black border-gray-300 dark:border-white">
-                      <DropdownMenuItem 
-                        onClick={() => setActiveTab("profile")}
-                        className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
-                      >
-                        <Check className="w-3 h-3" />
-                        Profile
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => setActiveTab("integrations")}
-                        className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
-                      >
-                        <Database className="w-3 h-3" />
-                        Integrations
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => setActiveTab("settings")}
-                        className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
-                      >
-                        <Cloud className="w-3 h-3" />
-                        Settings
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClose}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:text-white dark:hover:text-gray-300"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Background Image with Wavy Effect */}
-          <div className="relative h-20 overflow-hidden">
-            <WavyBackground
-              className="w-full h-full"
-              containerClassName="w-full h-full"
-              colors={["#000000", "#00ff41", "#ffffff", "#00bfff"]}
-              waveWidth={30}
-              backgroundFill="transparent"
-              speed="slow"
-              waveOpacity={0.3}
-            />
-          </div>
-
-          {/* Avatar */}
-          <div className="relative -mt-10 mb-6 flex justify-center">
-            <div className="relative">
-              <Avatar className="w-20 h-20 border-4 border-white dark:border-black shadow-lg">
-                <AvatarImage src="/placeholder-avatar.jpg" alt="Profile" />
-                <AvatarFallback className="bg-gray-200 dark:bg-white text-gray-600 dark:text-black text-lg font-semibold">
-                  {getUserInitials()}
-                </AvatarFallback>
-              </Avatar>
-              <Button
-                size="sm"
-                className="absolute -bottom-1 -right-1 rounded-full w-8 h-8 bg-white dark:bg-black border border-gray-300 dark:border-white shadow-sm hover:bg-gray-50 dark:hover:bg-gray-900 p-0"
-              >
-                <Camera className="w-4 h-4 text-gray-600 dark:text-white" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="p-6 h-[500px] overflow-y-auto">
-            <div>
-              <TabsContent value="profile" className="space-y-4 mt-0">
-                {/* 2-Column Layout for Profile Fields */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="flex-1 !m-0 !p-0">
+                <TabsContent value="profile" className="h-full !m-0 !p-0 !mt-0 !pt-0 !bg-transparent data-[state=active]:block data-[state=inactive]:hidden">
+                  <div className="h-full overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-black shadow-sm !m-0 !p-6">
+                    {/* Avatar Section */}
+                    <div className="mb-8 flex justify-center">
+                      <div className="relative">
+                        <Avatar className="w-24 h-24 border-4 border-gray-200 dark:border-gray-700 shadow-lg">
+                          <AvatarImage src="/placeholder-avatar.jpg" alt="Profile" />
+                          <AvatarFallback className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-2xl font-semibold">
+                            {getUserInitials()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <Button
+                          size="sm"
+                          className="absolute -bottom-2 -right-2 rounded-full w-10 h-10 bg-white dark:bg-black border border-gray-300 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-900 p-0"
+                        >
+                          <Camera className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* 2-Column Layout for Profile Fields */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     {/* First Name */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         First Name
                       </label>
                       <Input
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 focus:border-gray-300 dark:focus:border-gray-600 transition-colors"
                         placeholder="Enter your first name"
                       />
                     </div>
 
                     {/* Last Name */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Last Name
                       </label>
                       <Input
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 focus:border-gray-300 dark:focus:border-gray-600 transition-colors"
                         placeholder="Enter your last name"
                       />
                     </div>
@@ -670,26 +625,26 @@ export default function Settings() {
                   <div className="space-y-4">
                     {/* Username */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Username
                       </label>
                       <Input
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 focus:border-gray-300 dark:focus:border-gray-600 transition-colors"
                         placeholder="Enter your username"
                       />
                     </div>
 
                     {/* Website */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Website
                       </label>
                       <Input
                         value={website}
                         onChange={(e) => setWebsite(e.target.value)}
-                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white"
+                        className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 focus:border-gray-300 dark:focus:border-gray-600 transition-colors"
                         placeholder="Enter your website URL"
                       />
                     </div>
@@ -698,14 +653,14 @@ export default function Settings() {
 
                 {/* Biography - Full Width */}
                 <div className="mt-6">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Biography
                   </label>
                   <Textarea
                     value={biography}
                     onChange={(e) => setBiography(e.target.value)}
                     placeholder="Write a short biography..."
-                    className="w-full resize-none bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="w-full resize-none bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 focus:border-gray-300 dark:focus:border-gray-600 transition-colors"
                     rows={4}
                     maxLength={maxCharacters}
                   />
@@ -720,40 +675,20 @@ export default function Settings() {
                 </div>
 
                 {/* Save Profile Button */}
-                <div className="flex justify-between items-center mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex justify-end mt-8">
                   <Button
                     onClick={handleProfileSave}
-                    disabled={profileLoading}
-                    className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100"
+                    disabled={profileLoading || !hasProfileChanged()}
+                    className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:hover:bg-gray-400"
                   >
                     {profileLoading ? "Saving..." : "Save Profile"}
                   </Button>
-                  
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        // Clear all local storage and force reload
-                        localStorage.clear();
-                        window.location.href = '/auth';
-                      }}
-                      className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/20 text-sm px-3 py-1"
-                    >
-                      Force Clear
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleLogout}
-                      className="flex items-center gap-2 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Sign Out
-                    </Button>
-                  </div>
                 </div>
-              </TabsContent>
+                  </div>
+                </TabsContent>
 
-              <TabsContent value="integrations" className="space-y-8 mt-0">
+                <TabsContent value="integrations" className="h-full !m-0 !p-0 !mt-0 !pt-0 !bg-transparent data-[state=active]:block data-[state=inactive]:hidden">
+                  <div className="h-full overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-black shadow-sm !m-0 !p-6">
                 {(() => {
                   const grouped = groupIntegrationsByType();
                   
@@ -800,9 +735,9 @@ export default function Settings() {
 
                 {/* Add Integration Modal */}
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                  <DialogContent className="bg-white dark:bg-black border-gray-300 dark:border-white max-w-md">
+                  <DialogContent className="bg-white dark:bg-black border-gray-200 dark:border-gray-800 max-w-md">
                     <DialogHeader>
-                      <DialogTitle className="text-gray-900 dark:text-white">
+                      <DialogTitle className="text-gray-900 dark:text-gray-100">
                         Add {modalType.charAt(0) + modalType.slice(1).toLowerCase()} Integration
                       </DialogTitle>
                     </DialogHeader>
@@ -890,9 +825,9 @@ export default function Settings() {
 
                 {/* AI Provider Setup Modal */}
                 <Dialog open={isAISetupModalOpen} onOpenChange={setIsAISetupModalOpen}>
-                  <DialogContent className="bg-white dark:bg-black border-gray-300 dark:border-white max-w-md">
+                  <DialogContent className="bg-white dark:bg-black border-gray-200 dark:border-gray-800 max-w-md">
                     <DialogHeader>
-                      <DialogTitle className="text-gray-900 dark:text-white">
+                      <DialogTitle className="text-gray-900 dark:text-gray-100">
                         Setup {selectedAIProvider === "openai" ? "OpenAI GPT" : selectedAIProvider === "claude" ? "Anthropic Claude" : "Google Gemini"}
                       </DialogTitle>
                     </DialogHeader>
@@ -902,7 +837,7 @@ export default function Settings() {
                       </p>
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             API Key
                           </label>
                           <Input
@@ -910,37 +845,36 @@ export default function Settings() {
                             value={editFormData.apiKey}
                             onChange={(e) => setEditFormData({...editFormData, apiKey: e.target.value})}
                             placeholder={selectedAIProvider === "openai" ? "sk-..." : selectedAIProvider === "claude" ? "sk-ant-..." : "AIza..."}
-                            className="w-full font-mono bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                            className="w-full font-mono bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                           />
                         </div>
                         {selectedAIProvider === "openai" && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                               Model
                             </label>
                             <Select value={editFormData.model} onValueChange={(value) => setEditFormData({...editFormData, model: value})}>
-                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white">
+                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                                 <SelectValue placeholder="Select a model" />
                               </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-white">
-                                <SelectItem value="gpt-4o" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-4o (Recommended)</SelectItem>
-                                <SelectItem value="gpt-4o-mini" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-4o Mini</SelectItem>
-                                <SelectItem value="gpt-4-turbo" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-4 Turbo</SelectItem>
-                                <SelectItem value="gpt-3.5-turbo" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-3.5 Turbo</SelectItem>
+                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-gray-700">
+                                <SelectItem value="o3-mini" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">o3-mini</SelectItem>
+                                <SelectItem value="o4-mini" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">o4-mini (Recommended)</SelectItem>
+                                <SelectItem value="gpt-4.1" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-4.1</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
                         )}
                         {selectedAIProvider === "claude" && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                               Model
                             </label>
                             <Select value={editFormData.model} onValueChange={(value) => setEditFormData({...editFormData, model: value})}>
-                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white">
+                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                                 <SelectValue placeholder="Select a model" />
                               </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-white">
+                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-gray-700">
                                 <SelectItem value="claude-3-5-sonnet-20241022" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3.5 Sonnet (Recommended)</SelectItem>
                                 <SelectItem value="claude-3-opus-20240229" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3 Opus</SelectItem>
                                 <SelectItem value="claude-3-haiku-20240307" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3 Haiku</SelectItem>
@@ -950,14 +884,14 @@ export default function Settings() {
                         )}
                         {selectedAIProvider === "gemini" && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                               Model
                             </label>
                             <Select value={editFormData.model} onValueChange={(value) => setEditFormData({...editFormData, model: value})}>
-                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white">
+                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                                 <SelectValue placeholder="Select a model" />
                               </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-white">
+                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-gray-700">
                                 <SelectItem value="gemini-1.5-pro" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Gemini 1.5 Pro (Recommended)</SelectItem>
                                 <SelectItem value="gemini-1.5-flash" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Gemini 1.5 Flash</SelectItem>
                                 <SelectItem value="gemini-1.0-pro" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Gemini 1.0 Pro</SelectItem>
@@ -969,7 +903,7 @@ export default function Settings() {
                           <Button 
                             variant="outline" 
                             onClick={() => setIsAISetupModalOpen(false)}
-                            className="border-gray-300 dark:border-white text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-900"
+                            className="bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
                             disabled={testingIntegration}
                           >
                             Cancel
@@ -992,7 +926,7 @@ export default function Settings() {
                                 }
                               }
                             }}
-                            className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100"
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
                             disabled={testingIntegration || !editFormData.apiKey || !editFormData.model}
                           >
                             {testingIntegration ? "Testing..." : "Connect & Test"}
@@ -1005,9 +939,9 @@ export default function Settings() {
 
                 {/* Edit Integration Modal */}
                 <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                  <DialogContent className="bg-white dark:bg-black border-gray-300 dark:border-white max-w-md">
+                  <DialogContent className="bg-white dark:bg-black border-gray-200 dark:border-gray-800 max-w-md">
                     <DialogHeader>
-                      <DialogTitle className="text-gray-900 dark:text-white">
+                      <DialogTitle className="text-gray-900 dark:text-gray-100">
                         Edit {editingIntegration?.name} Settings
                       </DialogTitle>
                     </DialogHeader>
@@ -1027,18 +961,17 @@ export default function Settings() {
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                               Model
                             </label>
                             <Select value={editFormData.model} onValueChange={(value) => setEditFormData({...editFormData, model: value})}>
-                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-white text-black dark:text-white">
+                              <SelectTrigger className="w-full bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                                 <SelectValue placeholder="Select a model" />
                               </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-white">
-                                <SelectItem value="gpt-4o" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-4o (Recommended)</SelectItem>
-                                <SelectItem value="gpt-4o-mini" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-4o Mini</SelectItem>
-                                <SelectItem value="claude-3-opus" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3 Opus</SelectItem>
-                                <SelectItem value="claude-3-sonnet" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3 Sonnet</SelectItem>
+                              <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-gray-700">
+                                <SelectItem value="o3-mini" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">o3-mini</SelectItem>
+                                <SelectItem value="o4-mini" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">o4-mini (Recommended)</SelectItem>
+                                <SelectItem value="gpt-4.1" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">GPT-4.1</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -1107,7 +1040,7 @@ export default function Settings() {
                         <Button 
                           variant="outline" 
                           onClick={() => setIsEditModalOpen(false)}
-                          className="border-gray-300 dark:border-white text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-900"
+                          className="bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
                         >
                           Cancel
                         </Button>
@@ -1121,33 +1054,20 @@ export default function Settings() {
                     </div>
                   </DialogContent>
                 </Dialog>
-              </TabsContent>
+                  </div>
+                </TabsContent>
 
-              <TabsContent value="settings" className="space-y-4 mt-0">
-                <div className="text-center py-16 text-gray-500 dark:text-gray-400">
-                  <p>General settings coming soon...</p>
-                </div>
-              </TabsContent>
-            </div>
+                <TabsContent value="settings" className="h-full !m-0 !p-0 !mt-0 !pt-0 !bg-transparent data-[state=active]:block data-[state=inactive]:hidden">
+                  <div className="h-full overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-black shadow-sm !m-0 !p-6">
+                    <div className="text-center py-16 text-gray-500 dark:text-gray-400">
+                      <p>General settings coming soon...</p>
+                    </div>
+                  </div>
+                </TabsContent>
+              </div>
+            </Tabs>
           </div>
-
-          {/* Footer Buttons */}
-          <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-white">
-            <Button 
-              variant="outline" 
-              onClick={handleClose} 
-              className="border-gray-300 dark:border-white text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-900"
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSave} 
-              className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100"
-            >
-              Save changes
-            </Button>
-          </div>
-        </Tabs>
+        </div>
       </div>
     </div>
   );
