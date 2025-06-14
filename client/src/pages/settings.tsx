@@ -213,15 +213,7 @@ export default function Settings() {
     if (savedModel) {
       setSelectedModel(savedModel);
     }
-    
-    // Clean up any old mock integrations and refresh
-    setIntegrations(getConfiguredIntegrations());
   }, []);
-
-  // Update integrations when API keys change
-  useEffect(() => {
-    setIntegrations(getConfiguredIntegrations());
-  }, [chatgptKey]);
 
   // Test OpenAI API connection
   const testOpenAIConnection = async (apiKey: string, model: string) => {
