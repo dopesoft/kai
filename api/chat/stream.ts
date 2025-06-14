@@ -27,6 +27,152 @@ async function generateEmbedding(text: string, apiKey?: string): Promise<number[
   return response.data[0].embedding;
 }
 
+// Extract memories from conversation
+async function extractMemories(userMessage: string, assistantMessage: string, apiKey?: string) {
+  console.log('🧠 Extracting memories from conversation...');
+  
+  const openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
+  
+  const extractionPrompt = `Analyze this conversation and extract memorable information using a structured categorization system.
+
+User: ${userMessage}
+Assistant: ${assistantMessage}
+
+## LONG-TERM MEMORY Categories:
+
+### Personal
+- **identity**: Full name, nicknames, pronouns, age, birthday
+- **location**: Current city, country, timezone, previous locations  
+- **background**: Birthplace, nationality, languages, cultural background
+- **physical**: Health conditions, disabilities, allergies, dietary restrictions
+- **personality**: Traits, MBTI type, values, communication style
+
+### Professional  
+- **career**: Current job title, company, industry, work schedule
+- **expertise**: Skills, certifications, education, specializations
+- **history**: Previous jobs, career transitions, major projects
+- **goals**: Career aspirations, desired role changes, skill development
+
+### Relationships
+- **family**: Spouse/partner, children, parents, siblings, extended family
+- **social**: Close friends, social circles, community involvement
+- **professional**: Colleagues, mentors, business partners, clients
+- **pets**: Pet names, types, care requirements
+
+### Preferences
+- **interests**: Hobbies, passions, entertainment preferences
+- **lifestyle**: Daily routines, habits, living situation
+- **technology**: Devices used, platforms preferred, tech comfort level
+- **communication**: Preferred contact methods, response style, formality
+- **learning**: Learning style, preferred formats, topics of interest
+
+### Events
+- **recurring**: Birthdays, anniversaries, regular appointments
+- **upcoming**: Planned events, deadlines, milestones
+- **historical**: Important past events, achievements, life changes
+
+### Context
+- **financial**: Budget ranges, financial goals, spending priorities
+- **constraints**: Time zones, availability, schedule constraints, limitations
+
+## SHORT-TERM MEMORY Categories:
+
+### Conversation
+- **current_topic**: What we're discussing right now
+- **recent_questions**: Questions asked in this session
+- **clarifications**: Specific details provided for current task
+- **working_memory**: Temporary data, calculations, draft content
+
+### Task Progress
+- **active_projects**: Multi-step tasks in progress
+- **decisions_made**: Choices confirmed in this conversation
+- **next_steps**: Agreed upon actions for near future
+
+### Emotional Context
+- **current_mood**: User's expressed emotional state
+- **concerns**: Worries or issues raised this session
+
+### Session Metadata
+- **preferences_stated**: Temporary preferences for this task
+- **tools_used**: APIs, integrations accessed this session
+
+Return JSON with this exact structure:
+{
+  "short_term": [
+    {
+      "display": "Natural language description",
+      "tags": ["tag1", "tag2"]
+    }
+  ],
+  "long_term": [
+    {
+      "category": "personal|professional|relationships|preferences|events|context",
+      "key": "snake_case_identifier",
+      "value": "actual_value",
+      "display": "Natural language description",
+      "importance": 1-5
+    }
+  ]
+}
+
+Examples:
+- "My name is Sarah" → LONG-TERM: category="personal", key="full_name", value="Sarah"
+- "I own a restaurant" → LONG-TERM: category="professional", key="business_type", value="restaurant"
+- "My wife's birthday is June 5th" → LONG-TERM: category="events", key="wife_birthday", value="June 5th"
+- "I'm asking about marketing" → SHORT-TERM: conversation context
+- "For this project, make it formal" → SHORT-TERM: session preferences
+
+Only extract clear, factual information. Be very selective.`;
+
+  try {
+    const response = await (openai as any).responses.create({
+      model: "gpt-4",
+      instructions: "Extract memories from the conversation following the JSON format specified.",
+      input: extractionPrompt,
+      temperature: 0.7,
+      max_output_tokens: 1000
+    });
+
+    // Extract the assistant's response (not the reasoning part)
+    let content = '{"short_term":[],"long_term":[]}';
+    if (response.output && Array.isArray(response.output)) {
+      // Look for the assistant's response in the output array
+      for (const output of response.output) {
+        if (output.role === 'assistant' && output.content && output.content[0]?.text) {
+          content = output.content[0].text;
+          break;
+        }
+      }
+      
+      // Fallback: if no assistant role found, try the first content item
+      if (content === '{"short_term":[],"long_term":[]}' && response.output[0]?.content?.[0]?.text) {
+        content = response.output[0].content[0].text;
+      }
+    }
+    
+    console.log('📝 Raw extraction response:', content);
+    
+    // Try to clean the response if it has markdown code blocks
+    let cleanedContent = content;
+    if (content.includes('```json')) {
+      cleanedContent = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    }
+    
+    try {
+      const extracted = JSON.parse(cleanedContent);
+      console.log('📝 Parsed memories:', extracted);
+      return extracted;
+    } catch (parseError) {
+      console.error('❌ Failed to parse memory extraction response:', parseError);
+      console.error('Raw content was:', content);
+      return { short_term: [], long_term: [] };
+    }
+  } catch (error) {
+    console.error('❌ Memory extraction error:', error);
+    return { short_term: [], long_term: [] };
+  }
+}
+
 // Fetch relevant memories
 async function fetchMemories(userId: string, threadId: string, userMessage: string, apiKey?: string) {
   if (!supabaseAdmin) return { shortTermMemories: [], longTermMemories: [] };
@@ -244,35 +390,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           metadata: { user_id: userId, model: activeModel }
         });
 
-      // Extract and save memories
-      // For now, just save the exchange as short-term memory
-      await supabaseAdmin
-        .from('short_term_memory')
-        .insert([
-          {
-            user_id: userId,
-            thread_id: threadId,
-            message: message,
-            display_text: message,
-            sender: 'user',
-            tags: []
-          },
-          {
-            user_id: userId,
-            thread_id: threadId,
-            message: fullResponse,
-            display_text: fullResponse.substring(0, 200) + (fullResponse.length > 200 ? '...' : ''),
-            sender: 'assistant',
-            tags: []
-          }
-        ]);
+      // Extract and save memories using AI analysis
+      console.log('🎯 Attempting to extract and save memories...');
+      const extractedMemories = await extractMemories(message, fullResponse, apiKey);
+      
+      // Log what was extracted
+      console.log('📊 Extracted memories:', {
+        shortTermCount: extractedMemories.short_term?.length || 0,
+        longTermCount: extractedMemories.long_term?.length || 0,
+        shortTermMemories: extractedMemories.short_term,
+        longTermMemories: extractedMemories.long_term
+      });
 
-      // Send memory update notification
+      // Save short-term memories
+      if (extractedMemories.short_term && extractedMemories.short_term.length > 0) {
+        console.log(`💾 Saving ${extractedMemories.short_term.length} short-term memories...`);
+        for (const memory of extractedMemories.short_term) {
+          const { error } = await supabaseAdmin.from('short_term_memory').insert({
+            user_id: userId,
+            thread_id: threadId,
+            message: memory.display,
+            display_text: memory.display,
+            sender: 'system',
+            tags: memory.tags || ['auto-captured'],
+            metadata: { auto_captured: true }
+          });
+          if (error) {
+            console.error('❌ Short-term memory save error:', error);
+          }
+        }
+      }
+
+      // Save long-term memories with embeddings
+      if (extractedMemories.long_term && extractedMemories.long_term.length > 0) {
+        console.log(`💾 Saving ${extractedMemories.long_term.length} long-term memories...`);
+        for (const memory of extractedMemories.long_term) {
+          const embedding = await generateEmbedding(memory.value, apiKey);
+          
+          const { error } = await supabaseAdmin.from('long_term_memory').insert({
+            user_id: userId,
+            category: memory.category,
+            key: memory.key,
+            value: memory.value,
+            display_text: memory.display,
+            importance: memory.importance || 3,
+            embedding: embedding,
+            metadata: { 
+              auto_captured: true,
+              subcategory: memory.key.split('_')[0],
+              extracted_from: 'conversation'
+            }
+          });
+          if (error) {
+            console.error('❌ Long-term memory save error:', error);
+          } else {
+            console.log('✅ Long-term memory saved:', { 
+              category: memory.category, 
+              key: memory.key, 
+              value: memory.value,
+              importance: memory.importance 
+            });
+          }
+        }
+      }
+
+      // Send memory update notification with actual extracted memories
       res.write(`data: ${JSON.stringify({ 
         type: 'memory_update',
-        memories: {
-          short_term: [{ type: 'conversation', saved: true }]
-        }
+        memories: extractedMemories
       })}\n\n`);
     }
 

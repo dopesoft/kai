@@ -86,8 +86,8 @@ export default function Chat() {
         return;
       }
       
-      // Set loading state to prevent flash
-      setIsTyping(true);
+      // Don't set typing here - only when actually sending a message
+      // setIsTyping(true);
       
       const url = `/api/chat/threads/${threadId}?user_id=${effectiveUserId}`;
       console.log('Fetching thread messages from:', url);
@@ -132,14 +132,8 @@ export default function Chat() {
       
       console.log('✅ Setting messages:', { count: mappedMessages.length });
       setCurrentMessages(mappedMessages);
-      
-      // Clear loading state
-      setIsTyping(false);
     } catch (error) {
       console.error('❌ Failed to fetch thread messages:', error);
-      
-      // Clear loading state on error too
-      setIsTyping(false);
       
       toast({
         title: "Error",
@@ -342,6 +336,7 @@ export default function Chat() {
       };
 
       // Show thinking indicator immediately
+      console.log('🤔 Setting typing indicator to true');
       setIsTyping(true);
 
       // Use streaming endpoint
@@ -398,6 +393,7 @@ export default function Chat() {
                 } else if (data.content) {
                   // Transition from typing to streaming on first content
                   if (!hasStartedStreaming) {
+                    console.log('🔄 Transitioning from typing to streaming');
                     setIsTyping(false);
                     setIsStreaming(true);
                     setStreamingContent("");

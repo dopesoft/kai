@@ -183,9 +183,21 @@ Only extract clear, factual information. Be very selective.`;
     
     console.log('📝 Raw extraction response:', content);
     
-    const extracted = JSON.parse(content);
-    console.log('📝 Parsed memories:', extracted);
-    return extracted;
+    // Try to clean the response if it has markdown code blocks
+    let cleanedContent = content;
+    if (content.includes('```json')) {
+      cleanedContent = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    }
+    
+    try {
+      const extracted = JSON.parse(cleanedContent);
+      console.log('📝 Parsed memories:', extracted);
+      return extracted;
+    } catch (parseError) {
+      console.error('❌ Failed to parse memory extraction response:', parseError);
+      console.error('Raw content was:', content);
+      return { short_term: [], long_term: [] };
+    }
   } catch (error) {
     console.error('❌ Memory extraction error:', error);
     return { short_term: [], long_term: [] };
@@ -297,9 +309,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let assistantMessage = "";
 
-      // Add thinking delay
-      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-
       if (activeApiKey && activeApiKey !== "demo_key") {
         try {
           const userOpenai = new OpenAI({ apiKey: activeApiKey });
@@ -402,6 +411,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (userId && threadId) {
             console.log('🎯 Attempting to extract and save memories...');
             const extractedMemories = await extractMemories(message, assistantMessage, apiKey);
+            
+            // Log what was extracted
+            console.log('📊 Extracted memories:', {
+              shortTermCount: extractedMemories.short_term?.length || 0,
+              longTermCount: extractedMemories.long_term?.length || 0,
+              shortTermMemories: extractedMemories.short_term,
+              longTermMemories: extractedMemories.long_term
+            });
 
             // Save short-term memories
             if (extractedMemories.short_term.length > 0) {
@@ -559,8 +576,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (activeApiKey && activeApiKey !== "demo_key") {
         try {
-          await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-
           const userOpenai = new OpenAI({ apiKey: activeApiKey });
 
           // Enhanced system prompt with memory context
