@@ -101,12 +101,24 @@ export function ChatMessage({ content, role, timestamp, memoryCount }: ChatMessa
                       </code>
                     );
                   },
-                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                  ul: ({ children }) => <ul className="mb-2 last:mb-0 pl-4 space-y-1">{children}</ul>,
-                  ol: ({ children }) => <ol className="mb-2 last:mb-0 pl-4 space-y-1">{children}</ol>,
-                  li: ({ children }) => <li className="list-disc">{children}</li>,
-                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                  ul: ({ children }) => <ul className="mb-3 last:mb-0 pl-6 space-y-1 list-disc">{children}</ul>,
+                  ol: ({ children }) => <ol className="mb-3 last:mb-0 pl-6 space-y-1 list-decimal">{children}</ol>,
+                  li: ({ children }) => <li className="mb-1">{children}</li>,
+                  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
                   em: ({ children }) => <em className="italic">{children}</em>,
+                  h1: ({ children }) => <h1 className="text-2xl font-bold mb-3 mt-4 first:mt-0">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-xl font-bold mb-3 mt-4 first:mt-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h3>,
+                  h4: ({ children }) => <h4 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h4>,
+                  h5: ({ children }) => <h5 className="text-sm font-bold mb-2 mt-2 first:mt-0">{children}</h5>,
+                  h6: ({ children }) => <h6 className="text-sm font-bold mb-2 mt-2 first:mt-0">{children}</h6>,
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 py-2 my-3 italic text-gray-700 dark:text-gray-300">
+                      {children}
+                    </blockquote>
+                  ),
+                  hr: () => <hr className="my-4 border-gray-300 dark:border-gray-600" />,
                   a: ({ href, children }) => (
                     <a
                       href={href}
