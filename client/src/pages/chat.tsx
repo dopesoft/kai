@@ -67,11 +67,13 @@ export default function Chat() {
     if (activeThreadId && effectiveUserId) {
       console.log('✅ Calling fetchThreadMessages for:', activeThreadId);
       fetchThreadMessages(activeThreadId);
-    } else {
-      console.log('❌ Clearing messages - missing activeThreadId or effectiveUserId');
+    } else if (!activeThreadId) {
+      // Only clear messages if there's explicitly no active thread
+      console.log('❌ Clearing messages - no active thread');
       setCurrentMessages([]);
       setCurrentThread(null);
     }
+    // Don't clear messages if we're just waiting for effectiveUserId
   }, [activeThreadId, effectiveUserId]);
 
   const fetchThreadMessages = async (threadId: string) => {
@@ -83,6 +85,9 @@ export default function Chat() {
         console.warn('Missing threadId or effectiveUserId:', { threadId, effectiveUserId });
         return;
       }
+      
+      // Set loading state to prevent flash
+      setIsTyping(true);
       
       const url = `/api/chat/threads/${threadId}?user_id=${effectiveUserId}`;
       console.log('Fetching thread messages from:', url);
@@ -127,8 +132,15 @@ export default function Chat() {
       
       console.log('✅ Setting messages:', { count: mappedMessages.length });
       setCurrentMessages(mappedMessages);
+      
+      // Clear loading state
+      setIsTyping(false);
     } catch (error) {
       console.error('❌ Failed to fetch thread messages:', error);
+      
+      // Clear loading state on error too
+      setIsTyping(false);
+      
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to load conversation history",
@@ -240,26 +252,34 @@ export default function Chat() {
   // Restore active thread on mount (from localStorage)
   useEffect(() => {
     const storedThreadId = localStorage.getItem('activeThreadId');
-    console.log('Restore thread effect:', { storedThreadId, effectiveUserId, threads });
+    console.log('Restore thread effect:', { storedThreadId, effectiveUserId, threadsLength: threads.length });
 
     // If user just logged in (has real id), clear any anonymous id
     if (user?.id) {
       localStorage.removeItem('anon_user_id');
     }
 
-    if (storedThreadId && effectiveUserId) {
-      // Verify that the stored thread actually belongs to the current user
-      const existsForUser = threads.some((t: ChatThread) => t.thread_id === storedThreadId);
-      if (existsForUser) {
-        setActiveThreadId(storedThreadId);
+    // Only try to restore if we have both user ID and threads loaded
+    if (effectiveUserId && threads.length > 0) {
+      if (storedThreadId) {
+        // Verify that the stored thread actually belongs to the current user
+        const existsForUser = threads.some((t: ChatThread) => t.thread_id === storedThreadId);
+        if (existsForUser) {
+          setActiveThreadId(storedThreadId);
+        } else {
+          // Remove stale reference so no random selection occurs
+          localStorage.removeItem('activeThreadId');
+          setActiveThreadId(null);
+        }
       } else {
-        // Remove stale reference so no random selection occurs
-        localStorage.removeItem('activeThreadId');
         setActiveThreadId(null);
       }
-    } else {
+    } else if (effectiveUserId && threads.length === 0) {
+      // User has no threads, ensure we're in welcome state
+      localStorage.removeItem('activeThreadId');
       setActiveThreadId(null);
     }
+    // Don't do anything if we're still loading threads or waiting for user ID
   }, [effectiveUserId, threads.length]);
 
   const sendMessageMutation = useMutation({
@@ -382,10 +402,7 @@ export default function Chat() {
                 }
                 
                 if (data.done) {
-                  // End streaming mode and add final message
-                  setIsStreaming(false);
-                  setStreamingContent("");
-                  
+                  // Add final message first, then end streaming mode
                   const assistantMessage: Message = {
                     id: Date.now() + 1,
                     content: streamedContent,
@@ -394,6 +411,12 @@ export default function Chat() {
                   };
                   
                   setCurrentMessages(prev => [...prev, assistantMessage]);
+                  
+                  // End streaming mode after message is added
+                  setTimeout(() => {
+                    setIsStreaming(false);
+                    setStreamingContent("");
+                  }, 100);
                   
                   // Update thread's updated_at timestamp
                   queryClient.invalidateQueries({ queryKey: ['threads', effectiveUserId] });
