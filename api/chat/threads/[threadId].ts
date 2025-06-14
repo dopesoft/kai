@@ -16,6 +16,8 @@ const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
   : null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('Thread API called:', req.method, req.url, req.query);
+  
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -33,6 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { threadId } = req.query;
   
   if (!threadId || typeof threadId !== 'string') {
+    console.error('Missing threadId in request');
     return res.status(400).json({ error: 'threadId is required' });
   }
 

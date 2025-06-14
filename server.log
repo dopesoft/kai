@@ -1,0 +1,26 @@
+
+> rest-express@1.0.0 dev
+> lsof -ti:8000 | xargs kill -9 2>/dev/null || true && NODE_ENV=development tsx server/index.ts
+
+🔍 Loading environment variables...
+📁 Server .env path: /Users/n0m4d/Documents/Dev/2. Projects/1. Cursor/kai/kai/server/.env
+✅ Server .env loaded successfully
+🔍 Environment variables check:
+- SUPABASE_URL: ✅ Set
+- SUPABASE_ANON_KEY: ✅ Set
+- OPENAI_API_KEY: ❌ Not set
+- PORT: Not set (will use 8000)
+5:12:04 AM [express] serving on port 8000
+🔧 Initializing Supabase admin client... {
+  hasUrl: true,
+  hasServiceKey: true,
+  urlValue: 'Set',
+  serviceKeyValue: 'Set'
+}
+✅ Supabase admin client configured successfully
+5:12:13 AM [express] GET /api/chat/threads/test123 404 in 357ms :: {"error":"Thread not found"}
+5:12:20 AM [express] GET /api/chat/threads/test123 400 in 1ms :: {"error":"user_id is required"}
+5:12:27 AM [express] GET /api/nonexistent 404 in 5ms
+5:12:39 AM [express] GET /api/chat/threads/test123 404 in 196ms :: {"error":"Thread not found"}
+5:12:45 AM [express] GET /api/chat/threads/test123 404 in 194ms :: {"error":"Thread not found"}
+5:12:52 AM [express] GET /api/chat/threads/null 404 in 179ms :: {"error":"Thread not found"}

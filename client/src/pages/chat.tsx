@@ -42,7 +42,9 @@ export default function Chat() {
   // Determine the effective user identifier (real auth user or anonymous fallback)
   const getEffectiveUserId = () => {
     const anon = localStorage.getItem('anon_user_id');
-    return user?.id || anon || null;
+    const userId = user?.id || anon || null;
+    console.log('getEffectiveUserId:', { userId: user?.id, anon, effectiveUserId: userId });
+    return userId;
   };
 
   const effectiveUserId = getEffectiveUserId();
@@ -71,8 +73,37 @@ export default function Chat() {
 
   const fetchThreadMessages = async (threadId: string) => {
     try {
-      const response = await fetch(`/api/chat/threads/${threadId}?user_id=${effectiveUserId}`);
-      if (!response.ok) throw new Error('Failed to fetch thread');
+      // Validate inputs before making the request
+      if (!threadId || !effectiveUserId) {
+        console.warn('Missing threadId or effectiveUserId:', { threadId, effectiveUserId });
+        return;
+      }
+      
+      const url = `/api/chat/threads/${threadId}?user_id=${effectiveUserId}`;
+      console.log('Fetching thread messages from:', url);
+      
+      const response = await fetch(url);
+      
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        // Try to parse error response as JSON, but handle HTML responses
+        let errorMessage = 'Failed to fetch thread';
+        const contentType = response.headers.get('content-type');
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (e) {
+            // Failed to parse JSON, use default error message
+          }
+        } else {
+          console.error('Non-JSON error response:', response.status, contentType);
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
       const threadData = await response.json();
       
       setCurrentThread(threadData);
@@ -86,7 +117,7 @@ export default function Chat() {
       console.error('Failed to fetch thread messages:', error);
       toast({
         title: "Error",
-        description: "Failed to load conversation history",
+        description: error instanceof Error ? error.message : "Failed to load conversation history",
         variant: "destructive",
       });
     }
@@ -113,8 +144,25 @@ export default function Chat() {
         })
       });
       
-      if (!response.ok) throw new Error('Failed to create thread');
-      return response.json();
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type');
+        let errorMessage = 'Failed to create thread';
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } catch (e) {
+            // Failed to parse JSON
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      console.log('Thread creation response:', data); // Debug log
+      return data;
     },
     onSuccess: () => {
       refetchThreads();
@@ -146,6 +194,7 @@ export default function Chat() {
   };
 
   const handleThreadSelect = (threadId: string) => {
+    console.log('handleThreadSelect:', { threadId, effectiveUserId });
     setActiveThreadId(threadId);
     // Store in localStorage for page refresh persistence
     localStorage.setItem('activeThreadId', threadId);
@@ -176,6 +225,7 @@ export default function Chat() {
   // Restore active thread on mount (from localStorage)
   useEffect(() => {
     const storedThreadId = localStorage.getItem('activeThreadId');
+    console.log('Restore thread effect:', { storedThreadId, effectiveUserId });
     if (storedThreadId && effectiveUserId) {
       setActiveThreadId(storedThreadId);
     }
@@ -192,6 +242,7 @@ export default function Chat() {
         
         // Create thread in database
         threadToUse = await createThreadMutation.mutateAsync(title);
+        console.log('Created thread:', threadToUse); // Debug log
         setCurrentThread(threadToUse);
         setActiveThreadId(threadToUse!.thread_id);
         localStorage.setItem('activeThreadId', threadToUse!.thread_id);

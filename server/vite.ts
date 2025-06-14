@@ -40,10 +40,17 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
+  
+  // Add specific handler for unmatched API routes BEFORE the catch-all
+  app.use("/api/*", (req, res) => {
+    console.log(`API route not found: ${req.originalUrl}`);
+    res.status(404).json({ error: "API endpoint not found", path: req.originalUrl });
+  });
+  
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
-    // Skip API routes - let them be handled by the API router
+    // Skip API routes - they should have been handled above
     if (url.startsWith('/api/')) {
       return next();
     }
@@ -68,6 +75,11 @@ export async function setupVite(app: Express, server: Server) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
     }
+  });
+  
+  // Add a final handler for unmatched API routes in development
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ error: "API endpoint not found" });
   });
 }
 
