@@ -41,6 +41,21 @@ export default function Chat() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Scroll to bottom whenever messageContainerRef is set and we have messages
+  useEffect(() => {
+    if (messageContainerRef && currentMessages.length > 0) {
+      console.log('📍 MessageContainer ref available, scrolling to bottom');
+      const scrollToBottom = () => {
+        messageContainerRef.scrollTop = messageContainerRef.scrollHeight;
+      };
+      
+      // Multiple attempts to ensure it works when coming from other pages
+      setTimeout(scrollToBottom, 50);
+      setTimeout(scrollToBottom, 200);
+      setTimeout(scrollToBottom, 400);
+    }
+  }, [messageContainerRef, currentMessages.length]);
+
   // Determine the effective user identifier (real auth user or anonymous fallback)
   const effectiveUserId = useMemo(() => {
     const anon = localStorage.getItem('anon_user_id');
@@ -129,13 +144,19 @@ export default function Chat() {
       console.log('✅ Setting messages:', { count: mappedMessages.length });
       setCurrentMessages(mappedMessages);
       
-      // Scroll to bottom after messages load
-      setTimeout(() => {
+      // Scroll to bottom after messages load - multiple attempts to ensure it works
+      const scrollToBottom = () => {
         if (messageContainerRef) {
           messageContainerRef.scrollTop = messageContainerRef.scrollHeight;
           console.log('📍 Scrolled to bottom after loading thread');
         }
-      }, 100);
+      };
+      
+      // Multiple attempts with increasing delays to ensure scroll works
+      setTimeout(scrollToBottom, 50);
+      setTimeout(scrollToBottom, 150);
+      setTimeout(scrollToBottom, 300);
+      setTimeout(scrollToBottom, 500);
     } catch (error) {
       console.error('❌ Failed to fetch thread messages:', error);
       
