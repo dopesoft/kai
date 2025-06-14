@@ -7,7 +7,7 @@ import { loadThreads, getActiveThreadId, deleteThread, type ChatThread } from "@
 import { isYesterday } from "date-fns";
 import { useLocation } from "wouter";
 import { useTheme } from "@/lib/theme";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/use-auth";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -20,7 +20,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThreadId, onThreadDelete }: SidebarProps) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { user, profile, authEnabled } = useAuth();
 
@@ -171,14 +171,16 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
             <div className="space-y-1">
               <button 
                 onClick={() => setLocation("/memory")}
-                className="w-full justify-start text-[#666666] dark:text-white hover:text-black dark:hover:text-white h-8 flex items-center transition-colors rounded px-2"
+                className={`w-full justify-start h-8 flex items-center transition-colors rounded px-2
+                  ${location === "/memory" ? "bg-gray-200 dark:bg-gray-700 text-black dark:text-white" : "text-[#666666] dark:text-white hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#435058]"}`}
               >
                 <Brain className="w-4 h-4 mr-2" />
-                Memory
+                Memories
               </button>
               <button 
                 onClick={() => setLocation("/settings")}
-                className="w-full justify-start text-[#666666] dark:text-white hover:text-black dark:hover:text-white h-8 flex items-center transition-colors rounded px-2"
+                className={`w-full justify-start h-8 flex items-center transition-colors rounded px-2
+                  ${location === "/settings" ? "bg-gray-200 dark:bg-gray-700 text-black dark:text-white" : "text-[#666666] dark:text-white hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#435058]"}`}
               >
                 <Settings className="w-4 h-4 mr-2" />
                 Settings

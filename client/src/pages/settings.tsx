@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { WavyBackground } from "@/components/ui/wavy-background";
 import { SparklesCore } from "@/components/ui/sparkles";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/use-auth";
 
 // Add interface for integration type
 interface Integration {
@@ -33,15 +33,6 @@ export default function Settings() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const { user, profile, signOut, updateProfile, refreshProfile, loading, authEnabled, session } = useAuth();
-  
-  // Debug: Log current auth state
-  console.log('Settings - Auth State:', {
-    user: user ? 'exists' : 'null',
-    profile: profile ? 'exists' : 'null',
-    loading,
-    authEnabled,
-    session: session ? 'exists' : 'null'
-  });
   
   const [activeTab, setActiveTab] = useState("profile");
   

@@ -8,7 +8,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { SparklesBackground } from "@/components/ui/sparkles-background";
 import { BackgroundPathsEffect } from "@/components/ui/background-paths";
 import { AuthSetupBanner } from "@/components/auth/AuthSetupBanner";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/use-auth";
 import type { Message, ChatRequest } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { 

@@ -4,14 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { SparklesBackground } from "@/components/ui/sparkles-background";
+import { Loading } from "@/components/ui/loading";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function Auth() {
   const [, setLocation] = useLocation();
-  const { signIn, signUp, user, loading: authLoading } = useAuth();
+  const { signIn, signUp, user, loading: authLoading, authEnabled } = useAuth();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
@@ -104,9 +105,37 @@ export default function Auth() {
   };
 
   if (authLoading) {
+    return <Loading text="Initializing..." />
+  }
+
+  // If auth is not enabled, show a message
+  if (!authEnabled) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-black">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-600 dark:text-gray-300" />
+      <div className="min-h-screen relative overflow-hidden bg-white dark:bg-black">
+        <div className="absolute inset-0">
+          <SparklesBackground />
+        </div>
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
+          <Card className="w-full max-w-md bg-white/90 dark:bg-black/90 backdrop-blur-md border border-gray-200 dark:border-gray-800 shadow-2xl">
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold text-center text-black dark:text-white">
+                Authentication Required
+              </CardTitle>
+              <CardDescription className="text-center text-gray-600 dark:text-gray-400">
+                Supabase authentication is not configured. Please add your Supabase credentials to the .env file.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="mb-2">To enable authentication, add these to your .env file:</p>
+                <code className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs">
+                  VITE_SUPABASE_URL=your-project-url<br/>
+                  VITE_SUPABASE_ANON_KEY=your-anon-key
+                </code>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

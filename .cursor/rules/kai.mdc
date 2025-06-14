@@ -1,0 +1,112 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Below is a single, self‑contained rule set for Cursor to follow whenever it works on KAI, your AI‑assistant app. Treat it as the constitution of the codebase—everything else is a transient law.
+
+⸻
+
+1. Core Philosophy
+	1.	Respect the Existing Blueprint – Assume the established folder structure, style guides, and patterns are correct unless the prompt explicitly calls for refactor.
+	2.	Small, Safe, Reversible Steps – Implement narrowly scoped changes; when multiple files must shift together, update them in one commit with a crystal‑clear message.
+	3.	Prompt‑Driven, Convention‑Backed – Every deliverable must satisfy the user’s prompt and the conventions defined here—never one without the other. If a conflict arises, ask for clarification instead of guessing.
+	4.	“Everything Is a Module” Mindset – UI pieces, hooks, services, and utilities must all be designed for isolation, reuse, and lazy loading.
+
+⸻
+
+2. Workflow Contract
+	1.	Parsing Prompts – Break every prompt into:
+	•	Goal – what the feature/fix must achieve.
+	•	Inputs – files, data, environment variables, or APIs you must touch.
+	•	Constraints – naming rules, style requirements, performance targets, or security mandates.
+	•	Acceptance Criteria – observable behavior proving the work is done.
+	2.	Deliverables – For each task return only:
+	•	Modified or new file contents (full files—not diffs)
+	•	A short commit message in present‑tense imperative (≤72 chars)
+	•	Optional “Next steps” section if further work is obviously required
+	3.	Clarify or Fail Fast – If the prompt is ambiguous, Cursor must ask one concise follow‑up question before writing code; do not improvise.
+
+⸻
+
+3. Code Style & Structure
+	1.	Language & Framework – Use the languages already in the repo; if unsure, inspect adjacent files and mirror their syntax.
+	2.	Naming – PascalCase components, camelCase functions/vars, kebab‑case filenames. Keep filenames ≤30 chars.
+	3.	State Management – Prefer local state first, then context, then external store. Never introduce a new state tool without explicit instruction.
+	4.	Side Effects – Isolate async calls in clearly named service modules or hooks—no direct fetches in components.
+	5.	Dependency Discipline – Add new packages only when indispensable and after checking they meet MIT‑compatible licensing and are <200 kB min+gzip.
+
+⸻
+
+4. UI / UX Conventions
+	1.	Layout Skeleton – All pages inherit: top navbar, left sidebar, main content container. Never reposition these without instruction.
+	2.	Component Boundaries –
+	•	“Page” components: fetch, orchestrate, hand props downward.
+	•	“Feature” components: contain business logic, can own local state.
+	•	“UI” components: purely presentational.
+	3.	Accessibility – All interactive elements must have discernible labels and keyboard access by default.
+	4.	Responsiveness – Mobile‑first; aim for 320 px min width. Prefer CSS grid/flex layouts with clamp() on font sizes where practical.
+
+⸻
+
+5. Data & Persistence
+	1.	Database Access – Use existing wrapper or ORM helpers; never raw queries unless directed.
+	2.	Schema Changes – For each new table/column, supply:
+	•	Migration script
+	•	Rollback script
+	•	Seed data (if relevant)
+	3.	Secrets & Keys – Read from environment variables only; never hard‑code.
+
+⸻
+
+6. AI & Memory Layer
+	1.	Short‑ vs Long‑Term Memory – Respect table names and columns already defined (mem_short, mem_long or equivalents).
+	2.	Vector Ops – Encapsulate embedding and similarity calls in lib/ai/memory.ts (or equivalent). No vector math in components.
+	3.	API Selection – Choose the cheapest model that meets latency and quality requirements; expose the model choice via env var.
+
+⸻
+
+7. Error Handling & Logging
+	1.	Surface to User – Simplify: show actionable, non‑technical messages (“Couldn’t save memory. Please retry.”).
+	2.	Internal Logs – Log full error objects to the central logger but strip PII.
+	3.	Graceful Degradation – If the AI provider fails, fall back to cached responses or display a retry button.
+
+⸻
+
+8. Performance Targets
+	1.	First Contentful Paint <1.8 s on a mid‑2020 laptop via Lighthouse.
+	2.	Largest Payload ≤200 kB per route after compression.
+	3.	No Unbounded Loops / Memory Leaks – use AbortController for fetches, clear intervals/timeouts on unmount.
+
+⸻
+
+9. Security & Privacy
+	1.	Auth – Honor existing auth context; protect all routes flagged “authenticated.”
+	2.	Input Sanitization – Escape user content before rendering HTML.
+	3.	Dependency Audits – Run npm audit post‑install; block builds on high‑severity issues unless patched.
+
+⸻
+
+10. Testing & QA
+	1.	Unit Tests – Mandatory for every pure function or utility with branching logic.
+	2.	Component Tests – Add at least one rendering test per new component.
+	3.	E2E Happy Path – Extend the existing Cypress (or equivalent) suite when adding user‑facing flows. Tests must pass green before merge.
+
+⸻
+
+11. Documentation
+	1.	Inline Jsdoc/TSDoc – Functions >5 lines or any exported symbol require a concise comment explaining why, not what.
+	2.	README Updates – If setup steps change, patch the root README or the relevant section doc immediately.
+	3.	Changelog Discipline – Update CHANGELOG.md with every feature or breaking change, following Keep‑a‑Changelog format.
+
+⸻
+
+12. Guardrails for Future‑Proofing
+	1.	No Hidden Globals – Everything lives in explicit imports.
+	2.	No Dead Code – If it isn’t referenced, delete it.
+	3.	Backward Compatibility – Never break existing exports without bumping a version and noting it in the changelog.
+	4.	Ask Before Re‑Architecting – Large‑scale refactors require an architect‑level design note and explicit approval.
+
+⸻
+
+Remember: Precision, clarity, and minimalism win. Cursor’s job is to transform unambiguous prompts into production‑ready code that just works inside KAI—nothing more, nothing less.

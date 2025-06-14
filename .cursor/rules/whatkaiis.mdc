@@ -1,0 +1,149 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 🤖 KAI - Your Personal AI Assistant
+
+## Overview
+
+**KAI** is a sophisticated, full-stack AI assistant application designed to provide intelligent conversations while maintaining persistent memory and user context. Built with modern web technologies, KAI offers a seamless chat experience with advanced memory management, user authentication, and a beautiful, responsive interface.
+
+## ✨ Key Features
+
+### 🧠 **Intelligent Memory System**
+- **Short-term Memory**: Context-aware conversations within sessions
+- **Long-term Memory**: Persistent knowledge that spans multiple conversations
+- **Memory Management Interface**: View, edit, and organize your AI's memories
+- **Vector-based Storage**: Efficient semantic search and retrieval
+
+### 💬 **Advanced Chat Interface**
+- Real-time conversations with AI
+- Thread-based conversation history
+- Message persistence and retrieval
+- Rich text formatting and markdown support
+- Responsive design for all devices
+
+### 🔐 **Secure Authentication**
+- User registration and login
+- Profile management
+- Session persistence
+- Privacy-focused design
+- Optional authentication (can run without auth for development)
+
+### 🎨 **Modern UI/UX**
+- **Dark/Light Mode**: System-aware theme switching
+- **Responsive Design**: Works on desktop, tablet, and mobile
+- **Glassmorphism Effects**: Modern, beautiful interface
+- **Smooth Animations**: Particle effects and transitions
+- **Accessibility**: Keyboard navigation and screen reader support
+
+## 🏗️ Architecture
+
+### **Frontend (React + TypeScript)**
+```
+client/
+├── src/
+│   ├── components/          # Reusable UI components
+│   │   ├── auth/           # Authentication components
+│   │   ├── chat/           # Chat interface components
+│   │   └── ui/             # Base UI components (buttons, inputs, etc.)
+│   ├── hooks/              # Custom React hooks
+│   ├── lib/                # Utilities and configurations
+│   │   ├── auth-context.tsx # Authentication state management
+│   │   ├── supabase.ts     # Database and auth integration
+│   │   └── theme.tsx       # Theme management
+│   ├── pages/              # Main application pages
+│   │   ├── ChatPage.tsx    # Main chat interface
+│   │   ├── MemoryPage.tsx  # Memory management
+│   │   └── auth.tsx        # Login/register page
+│   └── index.css           # Global styles and design system
+```
+
+### **Backend Integration**
+- **Supabase**: Database, authentication, and real-time features
+- **AI Integration**: Ready for OpenAI, Anthropic, or custom AI models
+- **Vector Storage**: Semantic memory search capabilities
+
+### **Shared Components**
+```
+shared/
+└── types/                  # TypeScript type definitions
+
+
+## 📱 Usage
+
+### **Chat Interface**
+1. Navigate to the main chat page
+2. Start a conversation with your AI assistant
+3. Use the sidebar to manage conversation threads
+4. Create new chats or continue existing ones
+
+### **Memory Management**
+1. Visit `/memory` to access the Memory Management page
+2. View short-term and long-term memories
+3. Edit, delete, or organize memories as needed
+4. Add new memories manually
+
+### **Authentication**
+1. Create an account at `/auth`
+2. Log in to sync your data across devices
+3. Manage your profile and preferences
+
+## 🛠️ Tech Stack
+
+### **Frontend**
+- **React 18** - Modern React with hooks and context
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first styling
+- **Vite** - Fast build tool and dev server
+- **Wouter** - Lightweight routing
+- **React Query** - Server state management
+
+### **UI Components**
+- **Radix UI** - Accessible, unstyled components
+- **Lucide React** - Beautiful, consistent icons
+- **Framer Motion** - Smooth animations
+- **Custom Design System** - Cohesive visual language
+
+### **Backend & Data**
+- **Supabase** - Database, auth, and real-time features
+- **PostgreSQL** - Robust, scalable database
+- **Vector Extensions** - For semantic memory search
+
+## 🗓️ Development Roadmap
+
+### **Phase 1: Core Features** ✅
+- [x] Basic chat interface
+- [x] Authentication system
+- [x] Memory management UI
+- [x] Theme system (light/dark mode)
+- [x] Responsive design
+
+### **Phase 2: Enhanced AI Integration** 🚧
+- [ ] Multiple AI provider support
+- [ ] Advanced conversation context
+- [ ] Custom AI personalities
+- [ ] Voice input/output
+- [ ] File upload and analysis
+
+### **Phase 3: Advanced Memory** 📋
+- [ ] Automatic memory categorization
+- [ ] Memory importance scoring
+- [ ] Cross-conversation context
+- [ ] Memory visualization
+- [ ] Export/import capabilities
+
+### **Phase 4: Collaboration** 🔮
+- [ ] Shared conversations
+- [ ] Team workspaces
+- [ ] Memory sharing
+- [ ] Real-time collaboration
+- [ ] Permission system
+
+### **Phase 5: Enterprise Features** 🏢
+- [ ] Self-hosted deployment
+- [ ] Advanced analytics
+- [ ] Custom integrations
+- [ ] API access
+- [ ] Admin dashboard
