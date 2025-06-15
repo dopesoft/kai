@@ -36,6 +36,10 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
   // Handle logout
   const handleLogout = async () => {
     try {
+      // Clear active thread from localStorage to ensure fresh start on login
+      localStorage.removeItem('activeThreadId');
+      localStorage.removeItem('forceNewThread');
+      
       await signOut();
       // Navigate to home page after logout
       setLocation('/');

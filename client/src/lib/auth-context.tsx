@@ -177,6 +177,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null)
       setProfile(null)
       
+      // Clear chat-related localStorage to ensure fresh start on login
+      localStorage.removeItem('activeThreadId')
+      localStorage.removeItem('forceNewThread')
+      
       const { error } = await auth.signOut()
       if (error) throw error
       console.log('Auth Context - SignOut successful')
