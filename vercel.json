@@ -33,8 +33,7 @@
   ],
   "build": {
     "env": {
-      "NODE_VERSION": "18.x",
-      "NPM_CONFIG_OPTIONAL": "false"
+      "NODE_VERSION": "18.x"
     }
   }
 }
