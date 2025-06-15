@@ -727,21 +727,12 @@ export default function Settings() {
           <div className="max-w-[1100px] w-full bg-white dark:bg-black backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-8 h-[calc(80vh+16px)] flex flex-col min-h-0 mt-[105px]">
             <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">Settings</h1>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 !m-0 !p-0">
-              <div className="mb-6 flex items-center justify-between">
+              <div className="mb-6">
                 <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-gray-100 dark:bg-gray-800 p-1 text-gray-600 dark:text-gray-400 w-fit">
                   <TabsTrigger value="profile" className="w-[120px] justify-center bg-transparent hover:bg-gray-200 dark:hover:bg-gray-700 data-[state=active]:bg-white dark:data-[state=active]:bg-black text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 border-0 data-[state=active]:shadow-sm">Profile</TabsTrigger>
                   <TabsTrigger value="integrations" className="w-[120px] justify-center bg-transparent hover:bg-gray-200 dark:hover:bg-gray-700 data-[state=active]:bg-white dark:data-[state=active]:bg-black text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 border-0 data-[state=active]:shadow-sm">Integrations</TabsTrigger>
                   <TabsTrigger value="settings" className="w-[120px] justify-center bg-transparent hover:bg-gray-200 dark:hover:bg-gray-700 data-[state=active]:bg-white dark:data-[state=active]:bg-black text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 border-0 data-[state=active]:shadow-sm">Settings</TabsTrigger>
                 </TabsList>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex items-center gap-2 bg-white dark:bg-black border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 text-gray-700 dark:text-gray-300"
-                  onClick={handleClose}
-                >
-                  <X className="w-4 h-4" />
-                  Close
-                </Button>
               </div>
 
               <div className="flex-1 !m-0 !p-0">

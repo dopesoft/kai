@@ -402,69 +402,71 @@ export default function MemoryPage() {
     }
 
     return (
-      <div className="h-full max-h-full overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-black shadow-sm !m-0 !p-0">
-        <Table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 !m-0 !p-0">
-          <TableHeader>
-            <TableRow className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-              <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Memory</TableHead>
-              <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Tags</TableHead>
-              <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Created By</TableHead>
-              <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Date Created</TableHead>
-              {!isLongTerm && <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Expires</TableHead>}
-              <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {memories && memories.length > 0 ? (
-              memories.map((memory, idx) => {
-                const tags = isLongTerm 
-                  ? [(memory as LongTermMemory).category] 
-                  : (memory as ShortTermMemory).tags || [];
-                const dateCreated = isLongTerm 
-                  ? (memory as LongTermMemory).created_at 
-                  : (memory as ShortTermMemory).timestamp;
-                
-                return (
-                  <TableRow key={memory.id} className={`transition-colors ${idx % 2 === 0 ? "bg-white dark:bg-black hover:bg-gray-50 dark:hover:bg-gray-900" : "bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
-                    <TableCell className="max-w-xs whitespace-pre-wrap align-top text-gray-900 dark:text-gray-100">
-                      {memory.display_text || 'No content'}
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <div className="flex flex-wrap gap-1">
-                        {tags && tags.length > 0 ? tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-800">{tag}</Badge>
-                        )) : <span className="text-gray-500 dark:text-gray-400">No tags</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-top text-gray-900 dark:text-gray-100">{getUserDisplay(memory)}</TableCell>
-                    <TableCell className="align-top text-gray-700 dark:text-gray-300">{format(new Date(dateCreated), 'MMM dd, yyyy')}</TableCell>
-                    {!isLongTerm && (
-                      <TableCell className="align-top text-gray-700 dark:text-gray-300">
-                        {formatExpiry((memory as ShortTermMemory).expires_at)}
-                      </TableCell>
-                    )}
-                    <TableCell className="align-top">
-                      <div className="flex gap-2">
-                        <Button size="icon" variant="ghost" onClick={() => openEditModal(memory, isLongTerm)} className="hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-500 dark:text-gray-400">
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button size="icon" variant="destructive" onClick={() => deleteMemory(memory, isLongTerm)} disabled={saving} className="bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            ) : (
-              <TableRow>
-                <TableCell colSpan={isLongTerm ? 5 : 6} className="text-center text-gray-500 dark:text-gray-400 py-8">
-                  No memories found.
-                </TableCell>
+      <div className="h-full flex flex-col min-h-0 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-black shadow-sm !m-0 !p-0">
+        <div className="flex-1 overflow-y-auto">
+          <Table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 !m-0 !p-0">
+            <TableHeader className="sticky top-0 z-10">
+              <TableRow className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Memory</TableHead>
+                <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Tags</TableHead>
+                <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Created By</TableHead>
+                <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Date Created</TableHead>
+                {!isLongTerm && <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Expires</TableHead>}
+                <TableHead className="text-gray-900 dark:text-gray-100 font-medium">Actions</TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {memories && memories.length > 0 ? (
+                memories.map((memory, idx) => {
+                  const tags = isLongTerm 
+                    ? [(memory as LongTermMemory).category] 
+                    : (memory as ShortTermMemory).tags || [];
+                  const dateCreated = isLongTerm 
+                    ? (memory as LongTermMemory).created_at 
+                    : (memory as ShortTermMemory).timestamp;
+                  
+                  return (
+                    <TableRow key={memory.id} className={`transition-colors ${idx % 2 === 0 ? "bg-white dark:bg-black hover:bg-gray-50 dark:hover:bg-gray-900" : "bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                      <TableCell className="max-w-xs whitespace-pre-wrap align-top text-gray-900 dark:text-gray-100">
+                        {memory.display_text || 'No content'}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <div className="flex flex-wrap gap-1">
+                          {tags && tags.length > 0 ? tags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-800">{tag}</Badge>
+                          )) : <span className="text-gray-500 dark:text-gray-400">No tags</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top text-gray-900 dark:text-gray-100">{getUserDisplay(memory)}</TableCell>
+                      <TableCell className="align-top text-gray-700 dark:text-gray-300">{format(new Date(dateCreated), 'MMM dd, yyyy')}</TableCell>
+                      {!isLongTerm && (
+                        <TableCell className="align-top text-gray-700 dark:text-gray-300">
+                          {formatExpiry((memory as ShortTermMemory).expires_at)}
+                        </TableCell>
+                      )}
+                      <TableCell className="align-top">
+                        <div className="flex gap-2">
+                          <Button size="icon" variant="ghost" onClick={() => openEditModal(memory, isLongTerm)} className="hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-500 dark:text-gray-400">
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button size="icon" variant="destructive" onClick={() => deleteMemory(memory, isLongTerm)} disabled={saving} className="bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={isLongTerm ? 5 : 6} className="text-center text-gray-500 dark:text-gray-400 py-8">
+                    No memories found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     );
   };
