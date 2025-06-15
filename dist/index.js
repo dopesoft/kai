@@ -1145,9 +1145,15 @@ var vite_config_default = defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ["react", "react-dom"],
-          ui: ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-toast"],
-          motion: ["framer-motion"]
+          vendor: ["react", "react-dom", "wouter"],
+          radix: ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-toast", "@radix-ui/react-select", "@radix-ui/react-tabs", "@radix-ui/react-switch", "@radix-ui/react-label", "@radix-ui/react-checkbox", "@radix-ui/react-radio-group", "@radix-ui/react-slider", "@radix-ui/react-progress", "@radix-ui/react-separator", "@radix-ui/react-avatar", "@radix-ui/react-accordion", "@radix-ui/react-alert-dialog", "@radix-ui/react-popover", "@radix-ui/react-tooltip", "@radix-ui/react-hover-card", "@radix-ui/react-navigation-menu", "@radix-ui/react-menubar", "@radix-ui/react-context-menu", "@radix-ui/react-scroll-area", "@radix-ui/react-collapsible", "@radix-ui/react-toggle", "@radix-ui/react-toggle-group", "@radix-ui/react-aspect-ratio", "@radix-ui/react-slot"],
+          motion: ["framer-motion"],
+          icons: ["lucide-react", "react-icons"],
+          charts: ["recharts"],
+          forms: ["react-hook-form", "@hookform/resolvers"],
+          markdown: ["react-markdown", "react-syntax-highlighter", "remark-gfm"],
+          query: ["@tanstack/react-query"],
+          utils: ["clsx", "class-variance-authority", "tailwind-merge", "date-fns", "nanoid"]
         }
       }
     }

@@ -1,5 +1,5 @@
 import { Switch, Route } from "wouter";
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,12 +9,20 @@ import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider } from "@/lib/auth-context";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { useAuth } from "@/lib/use-auth";
-import Landing from "@/pages/Landing";
-import Chat from "@/pages/chat";
-import Settings from "@/pages/settings";
-import Memory from "@/pages/memory";
 import Auth from "@/pages/auth";
 import NotFound from "@/pages/not-found";
+
+// Lazy load heavy components
+const Landing = lazy(() => import("@/pages/Landing"));
+const Chat = lazy(() => import("@/pages/chat"));
+const Settings = lazy(() => import("@/pages/settings"));
+const Memory = lazy(() => import("@/pages/memory"));
+
+const LoadingSpinner = () => (
+  <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+    <div className="text-gray-100">Loading...</div>
+  </div>
+);
 
 function LandingOrDashboard() {
   const { user, loading, authEnabled } = useAuth();
@@ -37,7 +45,11 @@ function LandingOrDashboard() {
     </div>;
   }
 
-  return <Landing />;
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <Landing />
+    </Suspense>
+  );
 }
 
 function Router() {
@@ -53,17 +65,23 @@ function Router() {
       </Route>
       <Route path="/app">
         <AuthGuard requireAuth={true}>
-          <Chat />
+          <Suspense fallback={<LoadingSpinner />}>
+            <Chat />
+          </Suspense>
         </AuthGuard>
       </Route>
       <Route path="/settings">
         <AuthGuard requireAuth={true}>
-          <Settings />
+          <Suspense fallback={<LoadingSpinner />}>
+            <Settings />
+          </Suspense>
         </AuthGuard>
       </Route>
       <Route path="/memory">
         <AuthGuard requireAuth={true}>
-          <Memory />
+          <Suspense fallback={<LoadingSpinner />}>
+            <Memory />
+          </Suspense>
         </AuthGuard>
       </Route>
       <Route>
