@@ -1039,8 +1039,10 @@ export default function Settings() {
                                 <SelectValue placeholder="Select a model" />
                               </SelectTrigger>
                               <SelectContent className="bg-white dark:bg-black border-gray-300 dark:border-gray-700">
+                                <SelectItem value="claude-4-opus" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 4 Opus</SelectItem>
+                                <SelectItem value="claude-4-sonnet" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 4 Sonnet</SelectItem>
+                                <SelectItem value="claude-3-7-sonnet" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3.7 Sonnet</SelectItem>
                                 <SelectItem value="claude-3-5-sonnet-20241022" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3.5 Sonnet (Recommended)</SelectItem>
-                                <SelectItem value="claude-3-opus-20240229" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3 Opus</SelectItem>
                                 <SelectItem value="claude-3-haiku-20240307" className="text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-900">Claude 3 Haiku</SelectItem>
                               </SelectContent>
                             </Select>

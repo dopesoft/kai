@@ -100,8 +100,8 @@ export const integrationService = {
   // Migrate localStorage integrations to database (one-time migration)
   async migrateFromLocalStorage(userId: string): Promise<void> {
     try {
-      // Check if already migrated
-      const migrated = localStorage.getItem('integrations_migrated');
+      // Check if already migrated - temporarily disabled to force re-migration
+      const migrated = localStorage.getItem('integrations_migrated_v2');
       if (migrated === 'true') {
         return;
       }
@@ -119,40 +119,40 @@ export const integrationService = {
       // Migrate each integration
       const migrations = [];
 
-      if (openaiKey && verifiedIntegrations.includes('openai')) {
+      if (openaiKey) {
         migrations.push(
           this.createIntegration({
             user_id: userId,
             type: 'AI',
             provider: 'openai',
             api_key: openaiKey,
-            config: { model: openaiModel || 'gpt-4' },
+            config: { model: openaiModel || 'o4-mini' },
             is_active: true,
           })
         );
       }
 
-      if (claudeKey && verifiedIntegrations.includes('claude')) {
+      if (claudeKey) {
         migrations.push(
           this.createIntegration({
             user_id: userId,
             type: 'AI',
             provider: 'claude',
             api_key: claudeKey,
-            config: { model: claudeModel || 'claude-3-opus' },
+            config: { model: claudeModel || 'claude-3-5-sonnet-20241022' },
             is_active: true,
           })
         );
       }
 
-      if (geminiKey && verifiedIntegrations.includes('gemini')) {
+      if (geminiKey) {
         migrations.push(
           this.createIntegration({
             user_id: userId,
             type: 'AI',
             provider: 'gemini',
             api_key: geminiKey,
-            config: { model: geminiModel || 'gemini-pro' },
+            config: { model: geminiModel || 'gemini-1.5-pro' },
             is_active: true,
           })
         );
@@ -162,7 +162,7 @@ export const integrationService = {
       await Promise.all(migrations);
 
       // Mark as migrated
-      localStorage.setItem('integrations_migrated', 'true');
+      localStorage.setItem('integrations_migrated_v2', 'true');
       
       // Clean up localStorage (optional - keep for fallback)
       // localStorage.removeItem('chatgpt_api_key');
