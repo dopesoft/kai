@@ -41,8 +41,8 @@ export function Sidebar({ isOpen, onClose, onThreadSelect, onNewChat, activeThre
       localStorage.removeItem('forceNewThread');
       
       await signOut();
-      // Navigate to home page after logout
-      setLocation('/');
+      // Navigate to login page after logout
+      setLocation('/auth');
     } catch (error) {
       console.error('Error during logout:', error);
     }
