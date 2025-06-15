@@ -28,7 +28,7 @@ export default function Auth() {
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && user) {
-      setLocation("/");
+      setLocation("/app");
     }
   }, [user, authLoading, setLocation]);
 
@@ -57,7 +57,7 @@ export default function Auth() {
         title: "Welcome back!",
         description: "You have been signed in successfully.",
       });
-      setLocation("/");
+      setLocation("/app");
     } catch (error: any) {
       toast({
         title: "Sign in failed",

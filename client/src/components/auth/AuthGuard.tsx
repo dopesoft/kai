@@ -25,10 +25,10 @@ export function AuthGuard({ children, requireAuth = true }: AuthGuardProps) {
         setLocation('/auth')
       }
     } else {
-      // Auth page - redirect to home if already authenticated
+      // Auth page - redirect to welcome/app if already authenticated
       if (authEnabled && user) {
-        console.log('AuthGuard: Redirecting to / (already authenticated)')
-        setLocation('/')
+        console.log('AuthGuard: Redirecting to /app (already authenticated)')
+        setLocation('/app')
       }
     }
   }, [user, loading, requireAuth, authEnabled, setLocation])
