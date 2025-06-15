@@ -186,6 +186,34 @@
     }
   }
 
+  /* Grid patterns for backgrounds */
+  .bg-grid-pattern {
+    background-image: 
+      linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  .bg-grid-small {
+    background-image: 
+      linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* Additional grid patterns for landing page */
+  .bg-grid-slate-100 {
+    background-image: 
+      linear-gradient(to right, rgb(241 245 249) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(241 245 249) 1px, transparent 1px);
+  }
+
+  .bg-grid-slate-800 {
+    background-image: 
+      linear-gradient(to right, rgb(30 41 59) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(30 41 59) 1px, transparent 1px);
+  }
+
   /* Prose styles for markdown */
   .prose {
     @apply text-gray-900 dark:text-gray-100;
