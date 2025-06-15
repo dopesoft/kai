@@ -1,5 +1,5 @@
 import { motion, useScroll, useTransform } from "framer-motion"
-import { ArrowRight, Brain, Zap, MessageSquare, Clock, Shield, Check, Star, ChevronDown, Sparkles, Target, Rocket, Users, TrendingUp, Eye, Lightbulb, Coffee, Briefcase, Network, Cpu, Settings } from "lucide-react"
+import { ArrowRight, Brain, Zap, MessageSquare, Clock, Shield, Check, Star, ChevronDown, Target, Rocket, Users, TrendingUp, Eye, Lightbulb, Coffee, Briefcase, Network, Cpu, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useState, useRef } from "react"
